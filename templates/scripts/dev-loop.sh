@@ -300,10 +300,10 @@ if [ -f "$SPEC_FILE" ]; then
             in_section=true
             continue
         fi
-        if $in_section && echo "$line" | grep -q "^## "; then
+        if [[ "$in_section" == "true" ]] && echo "$line" | grep -q "^## "; then
             break
         fi
-        if $in_section && echo "$line" | grep -qi "skip"; then
+        if [[ "$in_section" == "true" ]] && echo "$line" | grep -qi "skip"; then
             phase_num=$(echo "$line" | grep -o 'Phase [0-9]' | grep -o '[0-9]')
             if [ -n "$phase_num" ]; then
                 SKIP_PHASES="$SKIP_PHASES $phase_num"
