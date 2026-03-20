@@ -52,7 +52,34 @@ qwen        # Qwen account (qwen.ai)
 cp pipeline/specs/_template.md pipeline/specs/my-feature.md
 # Edit the spec...
 ./pipeline/scripts/dev-loop.sh my-feature
+
+# If the pipeline fails (e.g. Claude runs out of credits), just re-run:
+./pipeline/scripts/dev-loop.sh my-feature     # auto-resumes from last failure
+
+# To start over from scratch:
+./pipeline/scripts/dev-loop.sh my-feature --reset
 ```
+
+### Skipping Phases
+
+Not every task needs every phase. In your spec file, there's a `## Pipeline Phases`
+section listing all seven phases. Add `skip` after any phase you don't need:
+
+```markdown
+## Pipeline Phases
+- Phase 0: Spec Hardening
+- Phase 1: Test Generation  skip
+- Phase 2: Plan Generation
+- Phase 3: Implementation
+- Phase 4: Adversarial Review  skip
+- Phase 5: Documentation
+- Phase 6: Context Regeneration
+```
+
+The progress dashboard will show skipped phases with ⏭ and the pipeline
+will jump straight past them. This is especially useful for tasks that don't
+fit the standard feature-development loop — for example, skip Test Generation
+when the task *is* a test migration.
 
 ## Pipeline Phases
 

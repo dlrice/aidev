@@ -1,0 +1,3069 @@
+
+
+### File: ./repo-context.txt
+```
+```
+
+
+
+### File: ./bin/cli.js
+```
+#!/usr/bin/env node
+
+const command = process.argv[2];
+
+const HELP = `
+  spec-driven-pipeline — Multi-LLM development pipeline
+
+  Usage:
+    dev-pipeline init          Onboard the pipeline into the current repo
+    dev-pipeline update        Update pipeline scripts (preserves config and docs)
+    dev-pipeline doctor        Check that all tools are installed and authenticated
+    dev-pipeline help          Show this help message
+
+  Install into any repo:
+    cd your-project
+    npx github:YOUR-USERNAME/dev-pipeline init
+`;
+
+async function main() {
+  switch (command) {
+    case 'init':
+      const { init } = require('../lib/init');
+      await init();
+      break;
+    case 'update':
+      const { update } = require('../lib/update');
+      await update();
+      break;
+    case 'doctor':
+      const { doctor } = require('../lib/doctor');
+      await doctor();
+      break;
+    case 'help':
+    case '--help':
+    case '-h':
+    case undefined:
+      console.log(HELP);
+      break;
+    default:
+      console.error(`Unknown command: ${command}`);
+      console.log(HELP);
+      process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error('Error:', err.message);
+  process.exit(1);
+});
+```
+
+
+
+### File: ./README.md
+```
+# Spec-Driven Development Pipeline
+
+An automated development pipeline that orchestrates three cloud-based LLM agents to produce high-quality code from markdown specifications.
+
+**Claude Code** (paid, $20/mo) handles implementation and planning. **Gemini CLI** and **Qwen Code** (both free) handle spec review, test generation, adversarial review, and documentation.
+
+## Install into any repo
+
+```bash
+cd your-project
+npx github:dlrice/dev-pipeline init
+```
+
+The `init` command will:
+
+1. Scan your `package.json` and config files to detect your tech stack
+2. Ask you to confirm what it found and fill any gaps
+3. Generate all pipeline files (agent instructions, scripts, config, doc stubs)
+4. Tell you what to do next
+
+**Private repos:** If your repo is private, ensure the user has `gh auth login` configured or use a personal access token. Install with:
+
+```bash
+npx github:dlrice/dev-pipeline#main init
+```
+
+## Commands
+
+```bash
+# Onboard the pipeline into a new repo
+npx github:dlrice/dev-pipeline init
+
+# Update pipeline scripts in an existing repo (preserves config and docs)
+npx github:dlrice/dev-pipeline update
+
+# Check that all tools are installed
+npx github:dlrice/dev-pipeline doctor
+```
+
+## After init
+
+```bash
+# Install CLI tools (Claude Code, Gemini CLI, Qwen Code)
+./pipeline/scripts/setup.sh
+
+# Authenticate each tool once
+claude      # Claude Pro account
+gemini      # Google account
+qwen        # Qwen account (qwen.ai)
+
+# Create a feature spec and run the pipeline
+cp pipeline/specs/_template.md pipeline/specs/my-feature.md
+# Edit the spec...
+./pipeline/scripts/dev-loop.sh my-feature
+```
+
+## Pipeline Phases
+
+| Phase                  | Agent(s)                        | Purpose                                    |
+| ---------------------- | ------------------------------- | ------------------------------------------ |
+| 0 — Spec Hardening     | Gemini + Qwen                   | Find gaps and ambiguity in your spec       |
+| 1 — Test Generation    | Gemini + Qwen                   | Write tests from different angles          |
+| 2 — Plan Generation    | Claude → Gemini + Qwen → Claude | Merge tests, create plan, review, revise   |
+| 3 — Implementation     | Claude                          | Write code to pass all tests               |
+| 4 — Adversarial Review | Qwen → Claude                   | Find remaining gaps, write more tests, fix |
+| 5 — Documentation      | Gemini                          | Update project docs                        |
+| 6 — Context Regen      | Shell script (no LLM)           | Regenerate CONTEXT.md from docs + codebase |
+
+## Directory structure
+
+All pipeline-internal files live under `pipeline/` to keep your repo root clean. Your own code, tests, and docs stay at root level.
+
+```
+your-project/
+├── CLAUDE.md              ← Agent instructions (root, read by Claude)
+├── GEMINI.md              ← Agent instructions (root, read by Gemini)
+├── AGENTS.md              ← Agent instructions (root, read by Qwen)
+├── CONTEXT.md             ← Auto-generated project context
+├── docs/                  ← Your project documentation
+├── src/                   ← Your source code
+├── tests/                 ← Your merged test suite
+└── pipeline/
+    ├── config.json        ← Pipeline configuration
+    ├── specs/             ← Feature specifications
+    ├── plans/             ← Implementation plans
+    ├── scripts/           ← Pipeline automation scripts
+    ├── reviews/           ← Spec critiques, plan reviews, adversarial reviews
+    ├── tests/             ← Intermediate test suites (gemini/, qwen/, adversarial/)
+    ├── logs/              ← Pipeline run logs
+    └── signals/           ← Inter-phase coordination files
+```
+
+## What gets generated
+
+| File                          | Purpose                                             | Overwritten on update?       |
+| ----------------------------- | --------------------------------------------------- | ---------------------------- |
+| `pipeline/config.json`        | Project configuration                               | No                           |
+| `CLAUDE.md`                   | Claude Code instructions                            | No                           |
+| `GEMINI.md`                   | Gemini CLI instructions                             | No                           |
+| `AGENTS.md`                   | Qwen Code instructions                              | No                           |
+| `CONTEXT.md`                  | Auto-generated project context (read by all agents) | No (regenerated by pipeline) |
+| `pipeline/specs/_template.md` | Feature spec template                               | No                           |
+| `docs/*.md`                   | Project context documents                           | No                           |
+| `pipeline/scripts/*.sh`       | Pipeline scripts                                    | **Yes** (always updated)     |
+| `.gitignore` additions        | Log exclusion                                       | Appended only                |
+
+## Cost
+
+| Tool              | Cost                        |
+| ----------------- | --------------------------- |
+| Claude Code (Pro) | $20/mo (~£17) per developer |
+| Gemini CLI        | Free                        |
+| Qwen Code         | Free                        |
+| **Total**         | **~£17/mo per developer**   |
+
+## Updating
+
+When the pipeline tool gets improvements:
+
+```bash
+npx github:dlrice/dev-pipeline update
+```
+
+This updates the scripts to the latest version while preserving your config, docs, specs, reviews, and any customisations to agent instruction files.
+
+## Platform Support
+
+The pipeline scripts require **bash** and standard Unix utilities (`find`, `grep`, `wc`, `sed`, `timeout`).
+
+| Platform         | Support                                    |
+| ---------------- | ------------------------------------------ |
+| macOS            | Full support                               |
+| Linux            | Full support                               |
+| Windows (WSL)    | Full support — run all commands inside WSL |
+| Windows (native) | Not supported — use WSL                    |
+
+**Note on `--dangerously-skip-permissions`:** The pipeline uses this flag to allow Claude Code to run without interactive permission prompts. This gives Claude unrestricted filesystem and command access during pipeline runs. Review the generated CLAUDE.md instructions to understand what Claude is permitted to do.
+
+## Requirements
+
+- Node.js 18+
+- Git
+- bash (macOS/Linux native, or WSL on Windows)
+- Claude Pro subscription ($20/mo)
+- Google account (for Gemini CLI)
+- Qwen account (for Qwen Code — free at qwen.ai)
+```
+
+
+
+### File: ./.gitignore
+```
+.vscode/
+node_modules/```
+
+
+
+### File: ./package.json
+```
+{
+  "name": "spec-driven-pipeline",
+  "version": "1.0.0",
+  "description": "Automated spec-driven development pipeline using Claude Code, Gemini CLI, and Qwen Code",
+  "bin": {
+    "dev-pipeline": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/"
+  ],
+  "dependencies": {
+    "enquirer": "^2.4.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ai",
+    "development",
+    "pipeline",
+    "claude",
+    "gemini",
+    "qwen",
+    "spec-driven",
+    "testing"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR-USERNAME/dev-pipeline.git"
+  }
+}
+```
+
+
+
+### File: ./lib/update.js
+```
+const path = require('path');
+const fs = require('fs');
+const { detect } = require('./detect');
+const { generate } = require('./generate');
+
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const NC = '\x1b[0m';
+
+async function update() {
+  const cwd = process.cwd();
+
+  console.log('');
+  console.log('  ==========================================');
+  console.log('  Spec-Driven Pipeline — Update');
+  console.log('  ==========================================');
+  console.log('');
+
+  // Check that pipeline/config.json exists
+  const configPath = path.join(cwd, 'pipeline', 'config.json');
+  if (!fs.existsSync(configPath)) {
+    console.error('  Error: pipeline/config.json not found.');
+    console.error('  Run "dev-pipeline init" first to set up the pipeline.');
+    process.exit(1);
+  }
+
+  // Read existing config
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+  // Flatten config for generate (it expects the flat format from detect/prompt)
+  const flatConfig = {
+    framework: config.techStack?.framework,
+    language: config.techStack?.language,
+    styling: config.techStack?.styling,
+    testRunner: config.techStack?.testRunner,
+    e2eRunner: config.techStack?.e2eRunner,
+    stateManagement: config.techStack?.stateManagement,
+    packageManager: config.techStack?.packageManager || 'npm',
+    commands: config.commands || {},
+    customConventions: '',
+    projectMaturity: 'established',
+  };
+
+  console.log('  Using existing pipeline/config.json');
+  console.log(`  Tech stack: ${Object.values(config.techStack || {}).filter(Boolean).join(', ')}`);
+  console.log('');
+  console.log('  Updating scripts (preserving config, docs, specs, and reviews)...');
+  console.log('');
+
+  // Generate with force=false — only scripts get writeAlways treatment
+  const { written, skipped } = generate(cwd, flatConfig, { force: false });
+
+  if (written.length > 0) {
+    console.log(`  ${GREEN}Updated:${NC}`);
+    for (const f of written) {
+      console.log(`    ${GREEN}✓${NC} ${f}`);
+    }
+  }
+
+  if (skipped.length > 0) {
+    console.log(`\n  ${YELLOW}Preserved (not modified):${NC}`);
+    for (const f of skipped) {
+      console.log(`    - ${f}`);
+    }
+  }
+
+  console.log('');
+  console.log('  Update complete. Scripts are now at the latest version.');
+  console.log('  Your config, docs, specs, and reviews were preserved.');
+  console.log('');
+}
+
+module.exports = { update };
+```
+
+
+
+### File: ./lib/generate.js
+```
+const fs = require('fs');
+const path = require('path');
+
+const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
+
+/**
+ * Generate all pipeline files in the target directory.
+ * Never overwrites existing files unless force=true.
+ */
+function generate(cwd, config, { force = false } = {}) {
+  const written = [];
+  const skipped = [];
+
+  // Directories to create
+  // Pipeline-internal dirs live under pipeline/ to reduce root clutter.
+  // docs/ and src/ stay at root (they're the developer's own files).
+  const dirs = [
+    'docs', 'src',
+    'pipeline/specs', 'pipeline/plans', 'pipeline/scripts', 'pipeline/logs',
+    'pipeline/signals',
+    'pipeline/reviews/spec-critiques', 'pipeline/reviews/plan-reviews',
+    'pipeline/reviews/adversarial',
+    'pipeline/tests/gemini', 'pipeline/tests/qwen', 'pipeline/tests/adversarial',
+    'tests',  // merged tests = real project tests, stays at root
+  ];
+
+  for (const dir of dirs) {
+    const fullPath = path.join(cwd, dir);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+    }
+    // Add .gitkeep to empty dirs
+    const gitkeep = path.join(fullPath, '.gitkeep');
+    if (!fs.existsSync(gitkeep) && isEmpty(fullPath)) {
+      fs.writeFileSync(gitkeep, '');
+    }
+  }
+
+  // Build template context
+  const ctx = buildContext(config);
+
+  // Generate config files (pipeline-internal → pipeline/)
+  writeIfNew(cwd, 'pipeline/config.json', renderConfig(config), force, written, skipped);
+
+  // Generate agent instruction files (root — agents read these directly)
+  writeIfNew(cwd, 'CLAUDE.md', renderClaude(ctx), force, written, skipped);
+  writeIfNew(cwd, 'GEMINI.md', renderGemini(ctx), force, written, skipped);
+  writeIfNew(cwd, 'AGENTS.md', renderAgents(ctx), force, written, skipped);
+  writeIfNew(cwd, 'CONTEXT.md', renderRepoState(), force, written, skipped);
+
+  // Generate spec template (pipeline-internal)
+  writeIfNew(cwd, 'pipeline/specs/_template.md', readTemplate('specs/_template.md'), force, written, skipped);
+
+  // Generate doc stubs (root — developer's own documentation)
+  writeIfNew(cwd, 'docs/ARCHITECTURE.md', renderArchDocs(ctx), force, written, skipped);
+  writeIfNew(cwd, 'docs/CONVENTIONS.md', renderConventionsDocs(ctx), force, written, skipped);
+  writeIfNew(cwd, 'docs/DATA-MODEL.md', readTemplate('docs/DATA-MODEL.md'), force, written, skipped);
+  writeIfNew(cwd, 'docs/DEPENDENCIES.md', readTemplate('docs/DEPENDENCIES.md'), force, written, skipped);
+  writeIfNew(cwd, 'docs/DECISIONS.md', readTemplate('docs/DECISIONS.md'), force, written, skipped);
+
+  // Generate scripts (always update these — they're the pipeline logic)
+  writeAlways(cwd, 'pipeline/scripts/dev-loop.sh', readTemplate('scripts/dev-loop.sh'), written);
+  writeAlways(cwd, 'pipeline/scripts/setup.sh', readTemplate('scripts/setup.sh'), written);
+  writeAlways(cwd, 'pipeline/scripts/generate-context.sh', readTemplate('scripts/generate-context.sh'), written);
+
+  // Make scripts executable
+  for (const script of ['pipeline/scripts/dev-loop.sh', 'pipeline/scripts/setup.sh', 'pipeline/scripts/generate-context.sh']) {
+    try { fs.chmodSync(path.join(cwd, script), 0o755); } catch (e) { /* windows */ }
+  }
+
+  // Append to .gitignore if it exists
+  appendGitignore(cwd);
+
+  return { written, skipped };
+}
+
+function buildContext(config) {
+  const techStack = [
+    config.framework ? `${capitalize(config.framework)}` : null,
+    config.language === 'typescript' ? 'TypeScript' : 'JavaScript',
+    config.styling ? capitalize(config.styling) : null,
+    config.testRunner ? capitalize(config.testRunner) : null,
+    config.e2eRunner ? capitalize(config.e2eRunner) : null,
+    config.stateManagement ? capitalize(config.stateManagement) : null,
+  ].filter(Boolean);
+
+  return {
+    techStackList: techStack,
+    techStackString: techStack.join(', '),
+    framework: config.framework || 'react',
+    language: config.language || 'typescript',
+    styling: config.styling || 'css',
+    testRunner: config.testRunner || 'vitest',
+    e2eRunner: config.e2eRunner,
+    stateManagement: config.stateManagement,
+    packageManager: config.packageManager || 'npm',
+    commands: config.commands,
+    customConventions: config.customConventions || '',
+    isTypeScript: config.language === 'typescript',
+  };
+}
+
+function renderConfig(config) {
+  const obj = {
+    techStack: {
+      framework: config.framework || 'react',
+      language: config.language || 'typescript',
+      styling: config.styling || 'tailwindcss',
+      testRunner: config.testRunner || 'vitest',
+      e2eRunner: config.e2eRunner || 'playwright',
+      stateManagement: config.stateManagement || 'zustand',
+      packageManager: config.packageManager || 'npm',
+    },
+    commands: {
+      test: config.commands.test || 'npm test',
+      lint: config.commands.lint || 'npm run lint',
+      typeCheck: config.commands.typeCheck || 'npx tsc --noEmit',
+      dev: config.commands.dev || 'npm run dev',
+    },
+    agents: {
+      implementer: 'claude',
+      testWriterBreadth: 'gemini',
+      testWriterAdversarial: 'qwen',
+      reviewer: 'qwen',
+      documenter: 'gemini',
+    },
+    phases: {
+      skipPlanForSmallFeatures: true,
+      autoProgressAfterPhase1: true,
+      pauseAfterPhase0: true,
+      pauseAfterPhase2: true,
+    },
+    complexity: {
+      maxScreens: 4,
+      maxNewComponents: 5,
+      maxNewApiEndpoints: 3,
+      maxModifiedFiles: 10,
+      maxNewCodeLines: 500,
+      maxTests: 50,
+    },
+  };
+  return JSON.stringify(obj, null, 2) + '\n';
+}
+
+function renderClaude(ctx) {
+  return `# Project Context
+
+Read CONTEXT.md before starting any task. It contains everything you need
+to know about this project: architecture, conventions, data model, decisions,
+dependencies, file map, component tree, state architecture, test coverage,
+and current feature status. It is auto-generated — do not modify it.
+
+**First-run fallback:** If CONTEXT.md contains only stub content (e.g.
+"No source files yet"), scan the codebase directly to understand the project
+before proceeding.
+
+Do not scan src/ to understand the project unless CONTEXT.md is a stub.
+CONTEXT.md already summarises every file. Only read specific source files
+when you need to modify them.
+
+## Tech Stack
+${ctx.techStackList.map(t => `- ${t}`).join('\n')}
+
+## Commands
+- Test: \`${ctx.commands.test || 'npm test'}\`
+- Lint: \`${ctx.commands.lint || 'npm run lint'}\`${ctx.isTypeScript ? `\n- Type check: \`${ctx.commands.typeCheck || 'npx tsc --noEmit'}\`` : ''}
+- Dev: \`${ctx.commands.dev || 'npm run dev'}\`
+
+## Your Role
+You are the primary implementer and plan generator for this project.
+You generate implementation plans, merge test suites, write all production
+code, and fix code when adversarial tests find gaps.
+
+## Code Conventions
+- Functional components only, no classes
+${ctx.isTypeScript ? '- All components must have TypeScript props interfaces\n' : ''}- Use named exports, not default exports
+- Keep components under 150 lines — extract if larger
+- Accessibility: all interactive elements need aria labels
+${ctx.customConventions ? `\n## Team Conventions\n${ctx.customConventions}\n` : ''}
+## Testing Conventions
+- Do not modify tests — fix the implementation instead
+- If a test seems wrong, flag it in your output but still make it pass
+- Run \`${ctx.commands.test || 'npm test'}\` after every significant change
+
+## Git Conventions
+- Commit messages: \`feat({scope}): {description}\` or \`fix({scope}): {description}\`
+- One logical change per commit
+
+## What NOT To Do
+- Do not modify files in pipeline/specs/, pipeline/plans/, or pipeline/reviews/
+- Do not skip failing tests — fix the code, not the test
+- Do not install new dependencies without noting them in your output
+- Do not modify CONTEXT.md (it is auto-generated)
+
+## Complexity Detection
+Before starting any plan or implementation, read the \`complexity\` section
+of \`pipeline/config.json\` for the project's specific thresholds. If the
+task exceeds any threshold (max new files, max tests, max new code lines,
+or max independent concerns), output
+\`COMPLEXITY_LIMIT: This feature should be split.\` and generate a
+decomposition to \`pipeline/specs/{feature-name}-decomposition.md\` instead of proceeding.
+
+During implementation, if you find yourself making quality compromises to fit
+within your context window, stop and output the same signal with a partial
+decomposition showing what is done and what remains.
+
+## After Completing a Task
+If you made any architectural decisions not already recorded in
+docs/DECISIONS.md, append them before committing.
+`;
+}
+
+function renderGemini(ctx) {
+  return `# Project Context
+
+Read CONTEXT.md before starting any task. It contains everything you need
+to know about this project: architecture, conventions, data model, decisions,
+dependencies, file map, component tree, state architecture, test coverage,
+and current feature status. It is auto-generated — do not modify it.
+
+**First-run fallback:** If CONTEXT.md contains only stub content (e.g.
+"No source files yet"), scan the codebase directly to understand the project
+before proceeding.
+
+Do not scan src/ to understand the project unless CONTEXT.md is a stub.
+CONTEXT.md already summarises every file. Only read specific source files
+when your task requires it.
+
+## Tech Stack
+${ctx.techStackList.map(t => `- ${t}`).join('\n')}
+
+## Your Role
+You are the test author (breadth focus), spec reviewer, plan reviewer,
+and documentation updater. You write tests BEFORE implementation exists.
+Your tests define the contract between the spec and the code.
+
+## Testing Conventions
+- ${ctx.testRunner ? capitalize(ctx.testRunner) : 'Vitest'} for unit/component tests
+${ctx.framework === 'react' ? '- React Testing Library for component tests\n' : ''}${ctx.e2eRunner ? `- ${capitalize(ctx.e2eRunner)} for e2e tests\n` : ''}- Describe blocks match spec sections
+- Test names start with "should" and describe user-visible behaviour
+- Example: \`it("should show error message when check-in is submitted empty")\`
+
+## Review Conventions
+When critiquing specs or plans, format each issue as:
+1. **Section**: the specific part of the document
+2. **Issue**: what is missing or ambiguous
+3. **Suggestion**: a concrete fix or addition
+
+## What NOT To Do
+- Do not write implementation code
+- Do not modify files in src/
+- Do not mock internal implementation details
+- Test behaviour, not structure
+- Do not modify CONTEXT.md (it is auto-generated)
+
+## Complexity Detection
+Before starting any task, read the \`complexity\` section of
+\`pipeline/config.json\` for the project's specific thresholds. If the
+feature exceeds any threshold, output
+\`COMPLEXITY_LIMIT: This feature should be split.\` and generate a
+decomposition to \`pipeline/specs/{feature-name}-decomposition.md\` instead of
+proceeding.
+`;
+}
+
+function renderAgents(ctx) {
+  return `# Project Context
+
+Read CONTEXT.md before starting any task. It contains everything you need
+to know about this project: architecture, conventions, data model, decisions,
+dependencies, file map, component tree, state architecture, test coverage,
+and current feature status. It is auto-generated — do not modify it.
+
+**First-run fallback:** If CONTEXT.md contains only stub content (e.g.
+"No source files yet"), scan the codebase directly to understand the project
+before proceeding.
+
+Do not scan src/ to understand the project unless CONTEXT.md is a stub.
+CONTEXT.md already summarises every file. Only read specific source files
+when your task requires it.
+
+## Tech Stack
+${ctx.techStackList.map(t => `- ${t}`).join('\n')}
+
+## Your Role
+You are the adversarial test author (depth focus), spec reviewer, plan
+reviewer, and adversarial code reviewer. You find what everyone else missed.
+
+## Testing Conventions (Adversarial Focus)
+- Write tests for failure modes, not happy paths
+- Focus on: error states, empty/null data, boundary values, rapid user
+  interaction, network failures, malformed API responses, race conditions
+- Name tests descriptively: \`it("should handle double-submit without creating duplicate entries")\`
+
+## Adversarial Review Format
+When reviewing implementations, use these sections:
+- **Spec Compliance Issues**: where implementation diverges from spec intent
+- **Security Concerns**: XSS, data exposure, injection risks
+- **Robustness Gaps**: missing error handling, cleanup, race conditions
+- **Accessibility Gaps**: missing ARIA, keyboard traps, contrast issues
+- **Tests Written**: list each new test file and what it covers
+
+## What NOT To Do
+- Do not modify implementation code in src/ during review
+- Do not modify existing tests — only add new ones
+- Do not give stylistic opinions — focus on correctness and safety
+- Do not modify CONTEXT.md (it is auto-generated)
+
+## Complexity Detection
+Before starting any task, read the \`complexity\` section of
+\`pipeline/config.json\` for the project's specific thresholds. If the
+feature exceeds any threshold, output
+\`COMPLEXITY_LIMIT: This feature should be split.\` and generate a
+decomposition to \`pipeline/specs/{feature-name}-decomposition.md\` instead of
+proceeding.
+`;
+}
+
+function renderRepoState() {
+  return `# Context
+
+> This file is auto-generated by \`./pipeline/scripts/generate-context.sh\`.
+> Do NOT edit manually. It is regenerated at the start and end of every pipeline run.
+> All LLM agents read this file before starting any task.
+> It combines all project documentation with a live codebase scan.
+
+## Project Summary
+New project. Pipeline infrastructure has been set up. No implementation yet.
+
+## Tech Stack and Commands
+See pipeline/config.json for details.
+
+## Conventions
+See docs/CONVENTIONS.md (will be inlined here after first generation).
+
+## Architecture
+See docs/ARCHITECTURE.md (will be inlined here after first generation).
+
+## Data Model
+No types defined yet.
+
+## Architecture Decisions
+No decisions recorded yet.
+
+## Dependencies
+See package.json (not yet created).
+
+## File Map
+No source files yet. The src/ directory is empty.
+
+## Component Tree
+No components yet.
+
+## State Architecture
+No stores yet.
+
+## API Surface
+No API calls yet.
+
+## Test Coverage Map
+No tests yet.
+
+## Recent Changes
+Pipeline initialized.
+
+## Known Issues and TODOs
+None yet.
+
+## Feature Status
+No features started yet.
+`;
+}
+
+function renderArchDocs(ctx) {
+  return `# Architecture
+
+> This file is maintained by Phase 5 of the dev pipeline and manual updates.
+> It describes the system as it IS, not as it should be.
+
+## Overview
+[Project overview — what it does, who it's for, one paragraph.]
+
+## Tech Stack
+${ctx.techStackList.map(t => `- ${t}`).join('\n')}
+
+## Directory Map
+\`\`\`
+src/
+├── components/    — ${ctx.framework ? capitalize(ctx.framework) : 'UI'} components
+├── hooks/         — Custom hooks for shared logic
+${ctx.stateManagement ? `├── store/         — ${capitalize(ctx.stateManagement)} stores\n` : ''}${ctx.isTypeScript ? '├── types/         — TypeScript interfaces\n' : ''}├── utils/         — Pure functions, no side effects
+└── api/           — API call functions
+\`\`\`
+
+## Data Flow
+[Describe how data moves through the application.]
+
+## Key Patterns
+[Describe recurring patterns.]
+`;
+}
+
+function renderConventionsDocs(ctx) {
+  return `# Conventions
+
+> This file is maintained by Phase 5 of the dev pipeline and manual updates.
+
+## Naming
+- Components: PascalCase (CheckInForm.${ctx.isTypeScript ? 'tsx' : 'jsx'})
+- Hooks: camelCase with use prefix (useInterventions.${ctx.isTypeScript ? 'ts' : 'js'})
+${ctx.stateManagement ? `- Stores: camelCase with Store suffix (checkInStore.${ctx.isTypeScript ? 'ts' : 'js'})\n` : ''}- Test files: {component}.test.${ctx.isTypeScript ? 'tsx' : 'jsx'} in tests/ directory
+
+## Component Rules
+- Max 150 lines, extract if larger
+${ctx.isTypeScript ? '- Props interface exported and named {Component}Props\n' : ''}- Named exports only, no default exports
+- Every interactive element needs aria-label or aria-labelledby
+
+## Testing
+- Test user behaviour, not implementation details
+- Describe blocks match spec sections
+- Test names start with "should"
+${ctx.customConventions ? `\n## Team Conventions\n${ctx.customConventions}\n` : ''}`;
+}
+
+// ─── Utilities ──────────────────────────────────────────────────
+
+function readTemplate(relativePath) {
+  const fullPath = path.join(TEMPLATES_DIR, relativePath);
+  if (fs.existsSync(fullPath)) {
+    return fs.readFileSync(fullPath, 'utf8');
+  }
+  return `# ${path.basename(relativePath, path.extname(relativePath))}\n\n[To be filled in.]\n`;
+}
+
+function writeIfNew(cwd, filePath, content, force, written, skipped) {
+  const fullPath = path.join(cwd, filePath);
+  if (fs.existsSync(fullPath) && !force) {
+    skipped.push(filePath);
+    return;
+  }
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, content);
+  written.push(filePath);
+}
+
+function writeAlways(cwd, filePath, content, written) {
+  const fullPath = path.join(cwd, filePath);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, content);
+  written.push(filePath);
+}
+
+function appendGitignore(cwd) {
+  const gitignorePath = path.join(cwd, '.gitignore');
+  const addition = 'pipeline/logs/*.log';
+
+  if (fs.existsSync(gitignorePath)) {
+    const content = fs.readFileSync(gitignorePath, 'utf8');
+    if (!content.includes(addition)) {
+      fs.appendFileSync(gitignorePath, `\n# Dev pipeline\n${addition}\n`);
+    }
+  } else {
+    fs.writeFileSync(gitignorePath, `node_modules/\ndist/\n.env\n.env.local\npipeline/logs/*.log\n.DS_Store\n`);
+  }
+}
+
+function isEmpty(dir) {
+  try {
+    const entries = fs.readdirSync(dir);
+    return entries.length === 0;
+  } catch (e) {
+    return true;
+  }
+}
+
+function capitalize(s) {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+module.exports = { generate };
+```
+
+
+
+### File: ./lib/init.js
+```
+const path = require('path');
+const { detect } = require('./detect');
+const { confirmDetection } = require('./prompt');
+const { generate } = require('./generate');
+
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const NC = '\x1b[0m';
+
+async function init() {
+  const cwd = process.cwd();
+
+  console.log('');
+  console.log('  ==========================================');
+  console.log('  Spec-Driven Pipeline — Init');
+  console.log('  ==========================================');
+  console.log('');
+
+  // Step 1: Detect
+  console.log('  Scanning project...');
+  const detected = detect(cwd);
+
+  // Warn about existing files
+  if (detected.existingFiles.length > 0) {
+    console.log(`\n  ${YELLOW}!${NC} Found existing pipeline files:`);
+    for (const f of detected.existingFiles) {
+      console.log(`    - ${f}`);
+    }
+    console.log('  These will NOT be overwritten. Use --force to replace them.');
+    console.log('  Scripts (pipeline/scripts/*.sh) are always updated to the latest version.');
+    console.log('');
+  }
+
+  // Step 2: Confirm and ask
+  const config = await confirmDetection(detected);
+
+  // Step 3: Generate
+  console.log('\n  Writing pipeline files...\n');
+  const force = process.argv.includes('--force');
+  const { written, skipped } = generate(cwd, config, { force });
+
+  // Report
+  if (written.length > 0) {
+    console.log(`  ${GREEN}Created/updated:${NC}`);
+    for (const f of written) {
+      console.log(`    ${GREEN}✓${NC} ${f}`);
+    }
+  }
+
+  if (skipped.length > 0) {
+    console.log(`\n  ${YELLOW}Skipped (already exist):${NC}`);
+    for (const f of skipped) {
+      console.log(`    - ${f}`);
+    }
+  }
+
+  // Next steps
+  console.log('');
+  console.log('  ==========================================');
+  console.log('  Setup complete!');
+  console.log('  ==========================================');
+  console.log('');
+  console.log('  Next steps:');
+  console.log('');
+  console.log('  1. Install CLI tools:');
+  console.log(`     ${GREEN}./pipeline/scripts/setup.sh${NC}`);
+  console.log('');
+  console.log('  2. Authenticate each tool once:');
+  console.log(`     ${GREEN}claude${NC}   — sign in with Claude Pro account`);
+  console.log(`     ${GREEN}gemini${NC}   — sign in with Google account`);
+  console.log(`     ${GREEN}qwen${NC}     — sign in with Qwen account (qwen.ai)`);
+  console.log('');
+
+  if (config.runBootstrap) {
+    console.log('  3. Bootstrap docs from your codebase:');
+    console.log(`     ${GREEN}./pipeline/scripts/setup.sh --bootstrap${NC}`);
+    console.log('');
+    console.log('  4. Generate initial context file:');
+    console.log(`     ${GREEN}./pipeline/scripts/generate-context.sh${NC}`);
+  } else {
+    console.log('  3. Generate initial context file:');
+    console.log(`     ${GREEN}./pipeline/scripts/generate-context.sh${NC}`);
+  }
+
+  console.log('');
+  console.log('  5. Start building:');
+  console.log(`     cp pipeline/specs/_template.md pipeline/specs/my-feature.md`);
+  console.log(`     # Edit the spec`);
+  console.log(`     ${GREEN}./pipeline/scripts/dev-loop.sh my-feature${NC}`);
+  console.log('');
+}
+
+module.exports = { init };
+```
+
+
+
+### File: ./lib/prompt.js
+```
+const { prompt } = require('enquirer');
+
+async function confirmDetection(detected) {
+  const techStack = [
+    detected.framework,
+    detected.language,
+    detected.testRunner,
+    detected.e2eRunner,
+    detected.styling,
+    detected.stateManagement,
+  ].filter(Boolean);
+
+  console.log('\n  Detected tech stack:');
+  console.log(`    ${techStack.join(', ') || '(nothing detected — is there a package.json?)'}`);
+  console.log('');
+
+  const { correct } = await prompt({
+    type: 'confirm',
+    name: 'correct',
+    message: 'Is the detected tech stack correct?',
+    initial: true,
+  });
+
+  let config = { ...detected };
+
+  if (!correct) {
+    config = await askTechStack(detected);
+  }
+
+  // Confirm commands
+  console.log('\n  Detected commands:');
+  if (config.commands.test) console.log(`    Test:       ${config.commands.test}`);
+  if (config.commands.lint) console.log(`    Lint:       ${config.commands.lint}`);
+  if (config.commands.typeCheck) console.log(`    Type check: ${config.commands.typeCheck}`);
+  if (config.commands.dev) console.log(`    Dev server: ${config.commands.dev}`);
+  console.log('');
+
+  const { commandsCorrect } = await prompt({
+    type: 'confirm',
+    name: 'commandsCorrect',
+    message: 'Are these commands correct?',
+    initial: true,
+  });
+
+  if (!commandsCorrect) {
+    config.commands = await askCommands(config);
+  }
+
+  // Ask for custom conventions
+  const { conventions } = await prompt({
+    type: 'input',
+    name: 'conventions',
+    message: 'Any additional team conventions? (press Enter to skip)',
+  });
+  config.customConventions = conventions || '';
+
+  // Ask about bootstrapping
+  if (config.projectMaturity === 'established') {
+    const { bootstrap } = await prompt({
+      type: 'confirm',
+      name: 'bootstrap',
+      message: 'Established codebase detected. Run doc bootstrap after setup? (scans codebase to generate docs/)',
+      initial: true,
+    });
+    config.runBootstrap = bootstrap;
+  } else {
+    config.runBootstrap = false;
+  }
+
+  return config;
+}
+
+async function askTechStack(defaults) {
+  const answers = await prompt([
+    {
+      type: 'select',
+      name: 'framework',
+      message: 'Framework:',
+      choices: ['react', 'next', 'remix', 'vue', 'nuxt', 'svelte', 'solid', 'astro', 'angular', 'other'],
+      initial: defaults.framework || 'react',
+    },
+    {
+      type: 'select',
+      name: 'language',
+      message: 'Language:',
+      choices: ['typescript', 'javascript'],
+      initial: defaults.language || 'typescript',
+    },
+    {
+      type: 'select',
+      name: 'styling',
+      message: 'Styling:',
+      choices: ['tailwindcss', 'css', 'css-modules', 'sass', 'styled-components', 'emotion', 'vanilla-extract', 'unocss', 'other'],
+      initial: defaults.styling || 'tailwindcss',
+    },
+    {
+      type: 'select',
+      name: 'testRunner',
+      message: 'Test runner:',
+      choices: ['vitest', 'jest', 'mocha', 'none'],
+      initial: defaults.testRunner || 'vitest',
+    },
+    {
+      type: 'select',
+      name: 'e2eRunner',
+      message: 'E2E test runner:',
+      choices: ['playwright', 'cypress', 'none'],
+      initial: defaults.e2eRunner || 'playwright',
+    },
+    {
+      type: 'select',
+      name: 'stateManagement',
+      message: 'State management:',
+      choices: ['react-query', 'zustand', 'redux', 'jotai', 'recoil', 'mobx', 'pinia', 'none'],
+      initial: defaults.stateManagement || 'zustand',
+    },
+  ]);
+
+  return {
+    ...defaults,
+    ...answers,
+    stateManagement: answers.stateManagement === 'none' ? null : answers.stateManagement,
+    testRunner: answers.testRunner === 'none' ? null : answers.testRunner,
+    e2eRunner: answers.e2eRunner === 'none' ? null : answers.e2eRunner,
+  };
+}
+
+async function askCommands(config) {
+  const pm = config.packageManager || 'npm';
+  const run = pm === 'npm' ? 'npm run' : pm;
+
+  const answers = await prompt([
+    {
+      type: 'input',
+      name: 'test',
+      message: 'Test command:',
+      initial: config.commands.test || `${run} test`,
+    },
+    {
+      type: 'input',
+      name: 'lint',
+      message: 'Lint command:',
+      initial: config.commands.lint || `${run} lint`,
+    },
+    {
+      type: 'input',
+      name: 'typeCheck',
+      message: 'Type check command:',
+      initial: config.commands.typeCheck || 'npx tsc --noEmit',
+    },
+    {
+      type: 'input',
+      name: 'dev',
+      message: 'Dev server command:',
+      initial: config.commands.dev || `${run} dev`,
+    },
+  ]);
+
+  return answers;
+}
+
+module.exports = { confirmDetection };
+```
+
+
+
+### File: ./lib/doctor.js
+```
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const YELLOW = '\x1b[33m';
+const BOLD = '\x1b[1m';
+const NC = '\x1b[0m';
+
+async function doctor() {
+  console.log('');
+  console.log('  ==========================================');
+  console.log('  Spec-Driven Pipeline — Doctor');
+  console.log('  ==========================================');
+  console.log('');
+
+  let allGood = true;
+
+  // ─── Prerequisites ──────────────────────────────────────────
+  console.log('  Prerequisites:');
+  allGood = check('Node.js', 'node --version', '18') && allGood;
+  allGood = check('Git', 'git --version') && allGood;
+
+  // ─── CLI Agents ─────────────────────────────────────────────
+  console.log('');
+  console.log('  CLI agents:');
+
+  const claudeOk = check('Claude Code', 'claude --version');
+  allGood = claudeOk && allGood;
+
+  const geminiOk = check('Gemini CLI', 'gemini --version');
+  allGood = geminiOk && allGood;
+
+  const qwenOk = check('Qwen Code', 'qwen --version');
+  allGood = qwenOk && allGood;
+
+  // ─── Authentication ─────────────────────────────────────────
+  // We check for credential files rather than running prompts,
+  // because unauthenticated CLIs hang waiting for interactive login.
+  console.log('');
+  console.log('  Authentication:');
+
+  if (claudeOk) {
+    const claudeAuth = checkClaudeAuth();
+    allGood = claudeAuth && allGood;
+    if (!claudeAuth) {
+      console.log(`    ${YELLOW}→${NC} Run ${BOLD}claude${NC} interactively to sign in (needs Pro/Max/Teams/Enterprise account)`);
+    }
+  } else {
+    console.log(`    ${RED}✗${NC}  Claude Code: not installed`);
+    console.log(`    ${YELLOW}→${NC} Install: ${BOLD}curl -fsSL https://claude.ai/install.sh | bash${NC}`);
+    console.log(`    ${YELLOW}→${NC} Or: ${BOLD}npm install -g @anthropic-ai/claude-code${NC}`);
+  }
+
+  if (geminiOk) {
+    const geminiAuth = checkGeminiAuth();
+    allGood = geminiAuth && allGood;
+    if (!geminiAuth) {
+      console.log(`    ${YELLOW}→${NC} Run ${BOLD}gemini${NC} interactively to sign in with your Google account (free)`);
+    }
+  } else {
+    console.log(`    ${RED}✗${NC}  Gemini CLI: not installed`);
+    console.log(`    ${YELLOW}→${NC} Install: ${BOLD}npm install -g @google/gemini-cli${NC}`);
+  }
+
+  if (qwenOk) {
+    const qwenAuth = checkQwenAuth();
+    allGood = qwenAuth && allGood;
+    if (!qwenAuth) {
+      console.log(`    ${YELLOW}→${NC} Run ${BOLD}qwen${NC} interactively to sign in (free account at qwen.ai)`);
+    }
+  } else {
+    console.log(`    ${RED}✗${NC}  Qwen Code: not installed`);
+    console.log(`    ${YELLOW}→${NC} Install: ${BOLD}npm install -g @qwen-code/qwen-code${NC}`);
+  }
+
+  // ─── Pipeline Files ─────────────────────────────────────────
+  console.log('');
+  console.log('  Pipeline files:');
+  checkFile('pipeline/config.json');
+  checkFile('CLAUDE.md');
+  checkFile('GEMINI.md');
+  checkFile('AGENTS.md');
+  checkFile('CONTEXT.md');
+  checkFile('pipeline/scripts/dev-loop.sh');
+  checkFile('pipeline/scripts/setup.sh');
+  checkFile('pipeline/scripts/generate-context.sh');
+  checkFile('pipeline/specs/_template.md');
+
+  // ─── Summary ────────────────────────────────────────────────
+  console.log('');
+  if (allGood) {
+    console.log(`  ${GREEN}All tools installed and authenticated.${NC} You're ready to go.`);
+  } else {
+    console.log(`  ${YELLOW}Some issues detected.${NC} Fix the items above, then run doctor again.`);
+    console.log(`  For full setup: ${BOLD}./pipeline/scripts/setup.sh${NC}`);
+  }
+  console.log('');
+}
+
+function check(name, command, minVersion) {
+  try {
+    const output = execSync(command, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000 }).trim();
+    const version = output.replace(/[^0-9.]/g, '').split('.')[0];
+
+    if (minVersion && parseInt(version) < parseInt(minVersion)) {
+      console.log(`  ${YELLOW}⚠${NC}  ${name}: ${output} (need v${minVersion}+)`);
+      return false;
+    }
+
+    console.log(`  ${GREEN}✓${NC}  ${name}: ${output}`);
+    return true;
+  } catch (e) {
+    console.log(`  ${RED}✗${NC}  ${name}: not found`);
+    return false;
+  }
+}
+
+// ─── Auth checks via credential files (instant, no hanging) ─────
+
+function checkClaudeAuth() {
+  const home = os.homedir();
+
+  // Linux/Windows: credentials file
+  if (fs.existsSync(path.join(home, '.claude', '.credentials.json'))) {
+    console.log(`  ${GREEN}✓${NC}  Claude Code: authenticated`);
+    return true;
+  }
+
+  // macOS: check Keychain
+  if (process.platform === 'darwin') {
+    try {
+      execSync('security find-generic-password -s "claude-code"', {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      });
+      console.log(`  ${GREEN}✓${NC}  Claude Code: authenticated`);
+      return true;
+    } catch (e) {
+      // Not in keychain
+    }
+  }
+
+  // Fallback: ANTHROPIC_API_KEY env var
+  if (process.env.ANTHROPIC_API_KEY) {
+    console.log(`  ${GREEN}✓${NC}  Claude Code: authenticated (API key)`);
+    return true;
+  }
+
+  console.log(`  ${YELLOW}⚠${NC}  Claude Code: not authenticated`);
+  return false;
+}
+
+function checkGeminiAuth() {
+  const home = os.homedir();
+
+  // Settings file created after first successful auth
+  if (fs.existsSync(path.join(home, '.gemini', 'settings.json'))) {
+    console.log(`  ${GREEN}✓${NC}  Gemini CLI: authenticated`);
+    return true;
+  }
+
+  // Application Default Credentials (gcloud auth)
+  if (fs.existsSync(path.join(home, '.config', 'gcloud', 'application_default_credentials.json'))) {
+    console.log(`  ${GREEN}✓${NC}  Gemini CLI: authenticated (gcloud ADC)`);
+    return true;
+  }
+
+  // Fallback: GEMINI_API_KEY env var
+  if (process.env.GEMINI_API_KEY) {
+    console.log(`  ${GREEN}✓${NC}  Gemini CLI: authenticated (API key)`);
+    return true;
+  }
+
+  console.log(`  ${YELLOW}⚠${NC}  Gemini CLI: not authenticated`);
+  return false;
+}
+
+function checkQwenAuth() {
+  const home = os.homedir();
+  const settingsPath = path.join(home, '.qwen', 'settings.json');
+
+  // Check settings.json for selectedType (indicates completed auth)
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const content = fs.readFileSync(settingsPath, 'utf8');
+      if (content.includes('"selectedType"')) {
+        console.log(`  ${GREEN}✓${NC}  Qwen Code: authenticated`);
+        return true;
+      }
+    } catch (e) {
+      // Can't read file
+    }
+  }
+
+  // Fallback: OPENAI_API_KEY env var (Qwen's API key mode)
+  if (process.env.OPENAI_API_KEY) {
+    console.log(`  ${GREEN}✓${NC}  Qwen Code: authenticated (API key)`);
+    return true;
+  }
+
+  console.log(`  ${YELLOW}⚠${NC}  Qwen Code: not authenticated`);
+  return false;
+}
+
+function checkFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    console.log(`    ${GREEN}✓${NC} ${filePath}`);
+  } else {
+    console.log(`    ${RED}✗${NC} ${filePath} (missing)`);
+  }
+}
+
+module.exports = { doctor };
+```
+
+
+
+### File: ./lib/detect.js
+```
+const fs = require('fs');
+const path = require('path');
+
+const MAX_FILE_COUNT = 5000; // Cap to avoid blocking on monorepos
+
+function detect(cwd) {
+  const result = {
+    framework: null,
+    language: null,
+    styling: null,
+    testRunner: null,
+    e2eRunner: null,
+    stateManagement: null,
+    packageManager: null,
+    commands: { test: null, lint: null, typeCheck: null, dev: null },
+    projectMaturity: 'new', // new | established
+    existingFiles: [],
+  };
+
+  // Detect package manager
+  // Note: if multiple lockfiles exist (e.g. after migration), first match wins.
+  // The user can correct this during the interactive confirmation step.
+  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
+    result.packageManager = 'pnpm';
+  } else if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
+    result.packageManager = 'yarn';
+  } else if (fs.existsSync(path.join(cwd, 'bun.lockb'))) {
+    result.packageManager = 'bun';
+  } else {
+    result.packageManager = 'npm';
+  }
+
+  // Read package.json
+  const pkgPath = path.join(cwd, 'package.json');
+  let pkg = null;
+  if (fs.existsSync(pkgPath)) {
+    try {
+      pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    } catch (e) {
+      // malformed package.json, proceed without it
+    }
+  }
+
+  if (pkg) {
+    const allDeps = {
+      ...(pkg.dependencies || {}),
+      ...(pkg.devDependencies || {}),
+    };
+
+    // Framework detection (ordered by specificity — meta-frameworks before base frameworks)
+    if (allDeps['next']) result.framework = 'next';
+    else if (allDeps['@remix-run/react'] || allDeps['remix']) result.framework = 'remix';
+    else if (allDeps['nuxt']) result.framework = 'nuxt';
+    else if (allDeps['astro']) result.framework = 'astro';
+    else if (allDeps['vue']) result.framework = 'vue';
+    else if (allDeps['svelte'] || allDeps['@sveltejs/kit']) result.framework = 'svelte';
+    else if (allDeps['solid-js']) result.framework = 'solid';
+    else if (allDeps['@angular/core']) result.framework = 'angular';
+    else if (allDeps['react']) result.framework = 'react';
+
+    // Language detection
+    if (allDeps['typescript'] || fs.existsSync(path.join(cwd, 'tsconfig.json'))) {
+      result.language = 'typescript';
+    } else {
+      result.language = 'javascript';
+    }
+
+    // Styling detection
+    if (allDeps['tailwindcss']) result.styling = 'tailwindcss';
+    else if (allDeps['styled-components']) result.styling = 'styled-components';
+    else if (allDeps['@emotion/react']) result.styling = 'emotion';
+    else if (allDeps['@vanilla-extract/css']) result.styling = 'vanilla-extract';
+    else if (allDeps['unocss']) result.styling = 'unocss';
+    else if (allDeps['sass'] || allDeps['node-sass']) result.styling = 'sass';
+    else if (hasCSSModules(cwd)) result.styling = 'css-modules';
+    else result.styling = 'css';
+
+    // Test runner detection
+    if (allDeps['vitest']) result.testRunner = 'vitest';
+    else if (allDeps['jest']) result.testRunner = 'jest';
+    else if (allDeps['mocha']) result.testRunner = 'mocha';
+
+    // E2E runner detection
+    if (allDeps['playwright'] || allDeps['@playwright/test']) result.e2eRunner = 'playwright';
+    else if (allDeps['cypress']) result.e2eRunner = 'cypress';
+
+    // State management detection
+    if (allDeps['@tanstack/react-query']) result.stateManagement = 'react-query';
+    else if (allDeps['zustand']) result.stateManagement = 'zustand';
+    else if (allDeps['@reduxjs/toolkit'] || allDeps['redux']) result.stateManagement = 'redux';
+    else if (allDeps['jotai']) result.stateManagement = 'jotai';
+    else if (allDeps['recoil']) result.stateManagement = 'recoil';
+    else if (allDeps['mobx']) result.stateManagement = 'mobx';
+    else if (allDeps['pinia']) result.stateManagement = 'pinia';
+
+    // Commands from scripts
+    const scripts = pkg.scripts || {};
+    const pm = result.packageManager;
+    const run = pm === 'npm' ? 'npm run' : pm;
+
+    if (scripts.test) result.commands.test = `${run} test`;
+    if (scripts.lint) result.commands.lint = `${run} lint`;
+    if (scripts.dev) result.commands.dev = `${run} dev`;
+    else if (scripts.start) result.commands.dev = `${run} start`;
+
+    // Type check command
+    if (result.language === 'typescript') {
+      if (scripts.typecheck) result.commands.typeCheck = `${run} typecheck`;
+      else if (scripts['type-check']) result.commands.typeCheck = `${run} type-check`;
+      else result.commands.typeCheck = 'npx tsc --noEmit';
+    }
+  }
+
+  // Project maturity — count source files across common directory names
+  const sourceDirs = ['src', 'app', 'pages', 'lib', 'components'];
+  let totalFiles = 0;
+  for (const dir of sourceDirs) {
+    const fullDir = path.join(cwd, dir);
+    if (fs.existsSync(fullDir)) {
+      totalFiles += countFiles(fullDir, MAX_FILE_COUNT - totalFiles);
+      if (totalFiles >= MAX_FILE_COUNT) break;
+    }
+  }
+  result.projectMaturity = totalFiles > 10 ? 'established' : 'new';
+
+  // Check for existing pipeline files (to warn before overwriting)
+  const pipelineFiles = [
+    'CLAUDE.md', 'GEMINI.md', 'AGENTS.md', 'CONTEXT.md',
+    'pipeline/config.json',
+    'pipeline/scripts/dev-loop.sh', 'pipeline/scripts/setup.sh', 'pipeline/scripts/generate-context.sh',
+  ];
+  result.existingFiles = pipelineFiles.filter(f => fs.existsSync(path.join(cwd, f)));
+
+  return result;
+}
+
+function countFiles(dir, remaining) {
+  let count = 0;
+  if (remaining <= 0) return count;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      if (entry.isFile()) {
+        count++;
+        if (count >= remaining) return count;
+      } else if (entry.isDirectory()) {
+        count += countFiles(path.join(dir, entry.name), remaining - count);
+        if (count >= remaining) return count;
+      }
+    }
+  } catch (e) {
+    // permission error or similar, skip
+  }
+  return count;
+}
+
+/**
+ * Check if the project uses CSS Modules by looking for .module.css files in src/
+ */
+function hasCSSModules(cwd) {
+  const srcDir = path.join(cwd, 'src');
+  if (!fs.existsSync(srcDir)) return false;
+  try {
+    return findFileWithPattern(srcDir, /\.module\.css$/, 3);
+  } catch (e) {
+    return false;
+  }
+}
+
+function findFileWithPattern(dir, pattern, maxDepth) {
+  if (maxDepth <= 0) return false;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      if (entry.isFile() && pattern.test(entry.name)) return true;
+      if (entry.isDirectory() && findFileWithPattern(path.join(dir, entry.name), pattern, maxDepth - 1)) return true;
+    }
+  } catch (e) {
+    // skip
+  }
+  return false;
+}
+
+module.exports = { detect };
+```
+
+
+
+### File: ./templates/specs/_template.md
+```
+# Feature: [Name]
+
+## Context
+[Why this feature exists. What problem it solves. Link to any relevant
+research, design, or prior discussion.]
+
+## Scope Check
+[Answer these questions honestly before writing the rest of the spec.
+If any answer suggests this is too large, split into multiple specs first.]
+- How many new screens or views? [aim for 1-2 per spec]
+- How many new components? [aim for 3-5 per spec]
+- How many new API endpoints consumed? [aim for 1-2 per spec]
+- How many existing files modified? [aim for under 10 per spec]
+- Could any part of this feature ship independently? [if yes, split it out]
+
+## Dependencies
+[List any features or specs that must be completed before this one.
+If none, write "None — this feature is self-contained."]
+- [spec-name] — [what this feature needs from it]
+
+## User Story
+As a [type of user], I want to [action], so that [benefit].
+
+## Acceptance Criteria
+- [ ] [Specific, testable criterion]
+- [ ] [Another criterion]
+- [ ] [Include error states explicitly]
+- [ ] [Include accessibility requirements explicitly]
+- [ ] [Include responsive/viewport requirements explicitly]
+
+## UI Behaviour
+[Step-by-step description of what the user sees and does.]
+
+1. User navigates to [route/screen]
+2. They see [initial state]
+3. When they [action], [result]
+4. If [error condition], [what happens]
+
+## Data Model
+[TypeScript interfaces for all data involved.]
+
+## API / State
+[API endpoints consumed, state stores affected, storage mechanisms used.]
+
+## Out of Scope
+[Explicitly list what this feature does NOT include. Prevents AI from
+over-building.]
+
+## Technical Constraints
+[Performance budgets, browser support, accessibility level (WCAG AA),
+minimum viewport width, etc.]
+```
+
+
+
+### File: ./templates/docs/DEPENDENCIES.md
+```
+# Dependencies
+
+> This file documents non-obvious dependencies — what they do in this project
+> and where they are used. Updated by Phase 5 of the dev pipeline.
+
+[Add entries as packages are installed.]
+```
+
+
+
+### File: ./templates/docs/DATA-MODEL.md
+```
+# Data Model
+
+> This file is the canonical source of truth for all TypeScript types.
+> Updated by Phase 5 of the dev pipeline when new types are introduced.
+
+## Core Types
+
+[Add TypeScript interfaces here as the project grows.]
+```
+
+
+
+### File: ./templates/docs/DECISIONS.md
+```
+# Architecture Decisions
+
+> Numbered records of significant choices. The "Reasoning" field is always
+> written by a human, never by an LLM — it captures WHY, not just WHAT.
+
+[Add decisions as they are made. Format:]
+
+<!--
+## 001: [Decision Title]
+**Chosen:** [what was selected]
+**Alternatives:** [what was considered and rejected]
+**Reasoning:** [human-written explanation of WHY]
+-->
+```
+
+
+
+### File: ./templates/scripts/setup.sh
+```
+#!/bin/bash
+set -euo pipefail
+
+# ─── Colours ─────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+echo ""
+echo "=========================================="
+echo "  Spec-Driven Pipeline — Setup"
+echo "=========================================="
+echo ""
+
+# ─── Check prerequisites ────────────────────────────────────────
+echo "Checking prerequisites..."
+
+if ! command -v node &> /dev/null; then
+    echo -e "${RED}✗ Node.js not found.${NC} Install v18+: https://nodejs.org"
+    exit 1
+fi
+
+NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
+if [ "$NODE_VERSION" -lt 18 ]; then
+    echo -e "${RED}✗ Node.js v18+ required.${NC} Found: $(node -v)"
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} Node.js $(node -v)"
+
+if ! command -v git &> /dev/null; then
+    echo -e "${RED}✗ Git not found.${NC} Install: https://git-scm.com"
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} Git $(git --version | cut -d' ' -f3)"
+
+if ! command -v npm &> /dev/null; then
+    echo -e "${RED}✗ npm not found.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} npm $(npm -v)"
+
+
+# ═════════════════════════════════════════════════════════════════
+# Install CLI agents
+# ═════════════════════════════════════════════════════════════════
+echo ""
+echo "Installing CLI agents..."
+echo ""
+
+# ─── Claude Code ─────────────────────────────────────────────────
+echo -e "${BOLD}1. Claude Code${NC}"
+if command -v claude &> /dev/null; then
+    CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
+    echo -e "   ${GREEN}✓${NC} Already installed (${CLAUDE_VERSION})"
+else
+    echo "   Installing Claude Code..."
+    if curl -fsSL https://claude.ai/install.sh | bash 2>/dev/null; then
+        echo -e "   ${GREEN}✓${NC} Claude Code installed via official installer"
+    else
+        echo "   Official installer failed, trying npm..."
+        npm install -g @anthropic-ai/claude-code
+        echo -e "   ${GREEN}✓${NC} Claude Code installed via npm"
+    fi
+fi
+echo ""
+
+# ─── Gemini CLI ──────────────────────────────────────────────────
+echo -e "${BOLD}2. Gemini CLI${NC}"
+if command -v gemini &> /dev/null; then
+    GEMINI_VERSION=$(gemini --version 2>/dev/null || echo "unknown")
+    echo -e "   ${GREEN}✓${NC} Already installed (${GEMINI_VERSION})"
+else
+    echo "   Installing Gemini CLI..."
+    npm install -g @google/gemini-cli
+    echo -e "   ${GREEN}✓${NC} Gemini CLI installed"
+fi
+echo ""
+
+# ─── Qwen Code ───────────────────────────────────────────────────
+echo -e "${BOLD}3. Qwen Code${NC}"
+if command -v qwen &> /dev/null; then
+    QWEN_VERSION=$(qwen --version 2>/dev/null || echo "unknown")
+    echo -e "   ${GREEN}✓${NC} Already installed (${QWEN_VERSION})"
+else
+    echo "   Installing Qwen Code..."
+    npm install -g @qwen-code/qwen-code
+    if command -v qwen &> /dev/null; then
+        echo -e "   ${GREEN}✓${NC} Qwen Code installed via npm"
+    else
+        echo "   npm install didn't add qwen to PATH, trying official installer..."
+        curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen.sh | bash 2>/dev/null || true
+        if command -v qwen &> /dev/null; then
+            echo -e "   ${GREEN}✓${NC} Qwen Code installed via official installer"
+        else
+            echo -e "   ${YELLOW}⚠${NC} Qwen Code installed but not on PATH."
+            echo "     You may need to restart your terminal or add it to your PATH."
+        fi
+    fi
+fi
+echo ""
+
+
+# ═════════════════════════════════════════════════════════════════
+# Verify authentication status (Best Practices)
+# ═════════════════════════════════════════════════════════════════
+echo "──────────────────────────────────────────"
+echo "  Checking authentication status..."
+echo "──────────────────────────────────────────"
+echo ""
+
+AUTH_ISSUES=0
+
+# ─── Claude Code auth ────────────────────────────────────────────
+# Best practice: Claude Code has a dedicated, non-interactive command
+# `claude auth status` that exits 0 if authenticated, 1 if not.
+if command -v claude &> /dev/null; then
+    CLAUDE_AUTHED=false
+
+    if claude auth status >/dev/null 2>&1; then
+        CLAUDE_AUTHED=true
+    # Fallback to checking the environment variable (highest priority in non-interactive mode)
+    elif [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        CLAUDE_AUTHED=true
+    fi
+
+    if [ "$CLAUDE_AUTHED" = true ]; then
+        echo -e "   ${GREEN}✓${NC} Claude Code: authenticated"
+    else
+        echo -e "   ${YELLOW}⚠${NC} Claude Code: not authenticated"
+        AUTH_ISSUES=$((AUTH_ISSUES + 1))
+    fi
+else
+    echo -e "   ${RED}✗${NC} Claude Code: not installed"
+    AUTH_ISSUES=$((AUTH_ISSUES + 1))
+fi
+
+# ─── Gemini CLI auth ─────────────────────────────────────────────
+# Best practice: Gemini CLI relies heavily on GCP ADC or explicit API keys. 
+# We check standard env vars first, then ADC, then local cached settings.
+if command -v gemini &> /dev/null; then
+    GEMINI_AUTHED=false
+
+    # 1. Check for standard Environment Variables
+    if [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ]; then
+        GEMINI_AUTHED=true
+    # 2. Check for Application Default Credentials (GCP)
+    elif [ -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
+        GEMINI_AUTHED=true
+    # 3. Check for settings file (created after successful OAuth via `gemini /auth`)
+    elif [ -f "$HOME/.gemini/settings.json" ]; then
+        GEMINI_AUTHED=true
+    fi
+
+    if [ "$GEMINI_AUTHED" = true ]; then
+        echo -e "   ${GREEN}✓${NC} Gemini CLI: authenticated"
+    else
+        echo -e "   ${YELLOW}⚠${NC} Gemini CLI: not authenticated"
+        AUTH_ISSUES=$((AUTH_ISSUES + 1))
+    fi
+else
+    echo -e "   ${RED}✗${NC} Gemini CLI: not installed"
+    AUTH_ISSUES=$((AUTH_ISSUES + 1))
+fi
+
+# ─── Qwen Code auth ──────────────────────────────────────────────
+# Best practice: Qwen Code uses OAuth by default (saving to oauth_creds.json),
+# or standard OpenAI-compatible API keys set via settings.json or Env Vars.
+if command -v qwen &> /dev/null; then
+    QWEN_AUTHED=false
+
+    # 1. Check for Qwen OAuth credentials (recommended free tier)
+    if [ -f "$HOME/.qwen/oauth_creds.json" ]; then
+        QWEN_AUTHED=true
+    # 2. Check settings.json for an explicit auth type selection
+    elif [ -f "$HOME/.qwen/settings.json" ] && grep -q '"selectedType"' "$HOME/.qwen/settings.json" 2>/dev/null; then
+        QWEN_AUTHED=true
+    # 3. Fallback: check standard environment variables
+    elif [ -n "${OPENAI_API_KEY:-}" ] || [ -n "${DASHSCOPE_API_KEY:-}" ]; then
+        QWEN_AUTHED=true
+    fi
+
+    if [ "$QWEN_AUTHED" = true ]; then
+        echo -e "   ${GREEN}✓${NC} Qwen Code: authenticated"
+    else
+        echo -e "   ${YELLOW}⚠${NC} Qwen Code: not authenticated"
+        AUTH_ISSUES=$((AUTH_ISSUES + 1))
+    fi
+else
+    echo -e "   ${RED}✗${NC} Qwen Code: not installed"
+    AUTH_ISSUES=$((AUTH_ISSUES + 1))
+fi
+
+echo ""
+
+# ─── Create directory structure (idempotent) ─────────────────────
+echo "Ensuring directory structure..."
+
+DIRS=(
+    "pipeline/specs"
+    "pipeline/plans"
+    "pipeline/reviews/spec-critiques"
+    "pipeline/reviews/plan-reviews"
+    "pipeline/reviews/adversarial"
+    "pipeline/tests/gemini"
+    "pipeline/tests/qwen"
+    "pipeline/tests/adversarial"
+    "pipeline/scripts"
+    "pipeline/logs"
+    "pipeline/signals"
+    "docs"
+    "tests"
+    "src"
+)
+
+for dir in "${DIRS[@]}"; do
+    mkdir -p "$dir"
+done
+echo -e "${GREEN}✓${NC} Directory structure ready"
+
+# ─── Create stub files (do NOT overwrite existing) ───────────────
+echo "Checking stub files..."
+
+STUB_FILES=(
+    "pipeline/specs/_template.md"
+    "CLAUDE.md"
+    "GEMINI.md"
+    "AGENTS.md"
+    "pipeline/config.json"
+    "docs/ARCHITECTURE.md"
+    "docs/CONVENTIONS.md"
+    "docs/DATA-MODEL.md"
+    "docs/DEPENDENCIES.md"
+    "docs/DECISIONS.md"
+)
+
+ALL_EXIST=true
+for file in "${STUB_FILES[@]}"; do
+    if [ ! -f "$file" ]; then
+        ALL_EXIST=false
+        echo -e "${YELLOW}!${NC} Missing: $file (should be in repo)"
+    fi
+done
+
+if [ "$ALL_EXIST" = true ]; then
+    echo -e "${GREEN}✓${NC} All stub files present"
+fi
+
+# ─── Bootstrap docs from existing codebase ───────────────────────
+if [ "${1:-}" = "--bootstrap" ]; then
+    echo ""
+    echo "Bootstrapping documentation from codebase..."
+    echo -e "${YELLOW}Warning:${NC} This will overwrite files in docs/."
+    read -p "Continue? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "  Running Claude Code to generate ARCHITECTURE.md and DATA-MODEL.md..."
+        claude -p "Scan this entire codebase. Read every file in src/, tests/, and config files. Generate docs/ARCHITECTURE.md and docs/DATA-MODEL.md as described in CLAUDE.md." --dangerously-skip-permissions || true
+
+        echo "  Running Gemini CLI to generate CONVENTIONS.md..."
+        gemini -p "Read every file in src/ and tests/. Generate docs/CONVENTIONS.md by inferring conventions actually in use." --yolo || true
+
+        echo "  Running Claude Code to generate DEPENDENCIES.md..."
+        claude -p "Read package.json and pipeline/config.json. Generate docs/DEPENDENCIES.md listing every non-trivial dependency with what it does and where it is used." --dangerously-skip-permissions || true
+
+        echo "  Running Claude Code to generate DECISIONS.md skeleton..."
+        claude -p "Scan the codebase and infer architectural decisions. Generate docs/DECISIONS.md with the decision and alternatives. Leave Reasoning fields for the developer to fill in." --dangerously-skip-permissions || true
+
+        echo ""
+        echo -e "${GREEN}✓${NC} Bootstrap complete. Review and correct all files in docs/."
+    fi
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# Done — show authentication instructions if needed
+# ═════════════════════════════════════════════════════════════════
+echo ""
+echo "=========================================="
+echo "  Setup complete!"
+echo "=========================================="
+echo ""
+
+if [ "$AUTH_ISSUES" -gt 0 ]; then
+    echo -e "  ${YELLOW}$AUTH_ISSUES tool(s) need authentication.${NC}"
+    echo "  Run each tool interactively once to complete login:"
+    echo ""
+    echo "  ┌──────────────────────────────────────────────────────────────┐"
+    echo "  │                                                              │"
+    echo -e "  │  ${BOLD}Claude Code${NC}                                               │"
+    echo "  │  Requires: Claude Pro, Max, Teams, or Enterprise account     │"
+    echo -e "  │  Run: ${GREEN}claude auth login${NC}                                      │"
+    echo "  │  → Opens browser for Anthropic OAuth login                   │"
+    echo "  │                                                              │"
+    echo -e "  │  ${BOLD}Gemini CLI${NC}                                                │"
+    echo "  │  Requires: Google account (free tier: 60 req/min)            │"
+    echo -e "  │  Run: ${GREEN}gemini${NC}                                                │"
+    echo "  │  → Opens browser for Google OAuth login                      │"
+    echo "  │                                                              │"
+    echo -e "  │  ${BOLD}Qwen Code${NC}                                                 │"
+    echo "  │  Requires: Qwen account (free tier: 2,000 req/day)           │"
+    echo -e "  │  Run: ${GREEN}qwen${NC} (Then type ${GREEN}/auth${NC})                              │"
+    echo "  │  → Select 'Qwen OAuth' to open browser login                 │"
+    echo "  │                                                              │"
+    echo "  │  All three use OAuth — no API keys or tokens to manage.      │"
+    echo "  │  Each login only needs to happen once per machine.           │"
+    echo "  │                                                              │"
+    echo "  └──────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "  After authenticating, verify with:"
+    echo -e "    ${GREEN}npx dev-pipeline doctor${NC}"
+    echo ""
+else
+    echo -e "  ${GREEN}All tools installed and authenticated!${NC}"
+    echo ""
+fi
+
+echo "  To start the pipeline on a feature:"
+echo "    cp pipeline/specs/_template.md pipeline/specs/my-feature.md"
+echo "    # Edit pipeline/specs/my-feature.md"
+echo -e "    ${GREEN}./pipeline/scripts/dev-loop.sh my-feature${NC}"
+echo ""```
+
+
+
+### File: ./templates/scripts/dev-loop.sh
+```
+#!/bin/bash
+set -euo pipefail
+
+# ─── Spec-Driven Development Pipeline ───────────────────────────
+# Orchestrates three LLM agents through a seven-phase development loop.
+#
+# CACHE OPTIMISATION: Claude Code invocations are structured to
+# maximise prompt cache hits:
+#   Session A1: merge tests + generate plan (cold start)
+#   Session A2: revise plan based on reviews (--continue reuses cache)
+#   Session B1: implement (cold start)
+#   Session B2: fix adversarial failures (--continue reuses cache)
+# The stable prefix (CONTEXT.md + CLAUDE.md + tool definitions) is
+# paid once per cold start, then read from cache at 90% discount
+# for continued sessions.
+#
+# CONTEXT.md: A single file combining all project docs and codebase
+# state. Generated by a pure shell script (no LLM cost). All agents
+# read this one file instead of scanning multiple doc files separately.
+#
+# Usage:
+#   ./pipeline/scripts/dev-loop.sh <feature-name>              # Full pipeline
+#   ./pipeline/scripts/dev-loop.sh <feature-name> --from 2     # Start from phase 2
+#   ./pipeline/scripts/dev-loop.sh <feature-name> --only 0     # Run single phase
+#   ./pipeline/scripts/dev-loop.sh <feature-name> --force       # Skip complexity halts
+# ─────────────────────────────────────────────────────────────────
+
+# ─── Configuration ───────────────────────────────────────────────
+# Timeout for each agent invocation (seconds). Override with env var.
+AGENT_TIMEOUT="${AGENT_TIMEOUT:-3600}"  # 60 minutes default
+
+# ─── Parse arguments ─────────────────────────────────────────────
+FEATURE="${1:?Usage: ./pipeline/scripts/dev-loop.sh <feature-name> [--from N] [--only N] [--force]}"
+shift
+
+FROM_PHASE=0
+ONLY_PHASE=-1
+FORCE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --from) FROM_PHASE="$2"; shift 2 ;;
+        --only) ONLY_PHASE="$2"; shift 2 ;;
+        --force) FORCE=true; shift ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+SPEC_FILE="pipeline/specs/${FEATURE}.md"
+PLAN_FILE="pipeline/plans/${FEATURE}-plan.md"
+PLAN_DONE="pipeline/signals/${FEATURE}-plan.done"
+PLAN_GEMINI="pipeline/reviews/plan-reviews/${FEATURE}-gemini.md"
+PLAN_QWEN="pipeline/reviews/plan-reviews/${FEATURE}-qwen.md"
+REVIEW_FILE="pipeline/reviews/adversarial/${FEATURE}-review.md"
+IMPL_DONE="pipeline/signals/${FEATURE}-impl.done"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+LOG_FILE="pipeline/logs/${FEATURE}-${TIMESTAMP}.log"
+
+# Session IDs for Claude --continue
+SESSION_A_ID=""
+SESSION_B_ID=""
+
+# ─── Validation ──────────────────────────────────────────────────
+if [ ! -f "$SPEC_FILE" ]; then
+    echo "Error: spec file $SPEC_FILE not found"
+    echo "Create one with: cp pipeline/specs/_template.md $SPEC_FILE"
+    exit 1
+fi
+
+mkdir -p pipeline/logs pipeline/reviews/spec-critiques pipeline/reviews/plan-reviews \
+         pipeline/reviews/adversarial pipeline/tests/gemini pipeline/tests/qwen \
+         pipeline/tests/adversarial pipeline/plans pipeline/signals tests
+
+# ─── Read complexity thresholds from config ──────────────────────
+MAX_SCREENS=4
+MAX_COMPONENTS=5
+MAX_API_ENDPOINTS=3
+MAX_MODIFIED_FILES=10
+MAX_CODE_LINES=500
+MAX_TESTS=50
+
+if [ -f "pipeline/config.json" ] && command -v node &> /dev/null; then
+    eval "$(node -e "
+const c = require('./pipeline/config.json').complexity || {};
+console.log('MAX_SCREENS=' + (c.maxScreens || 4));
+console.log('MAX_COMPONENTS=' + (c.maxNewComponents || 5));
+console.log('MAX_API_ENDPOINTS=' + (c.maxNewApiEndpoints || 3));
+console.log('MAX_MODIFIED_FILES=' + (c.maxModifiedFiles || 10));
+console.log('MAX_CODE_LINES=' + (c.maxNewCodeLines || 500));
+console.log('MAX_TESTS=' + (c.maxTests || 50));
+" 2>/dev/null)" || true
+fi
+
+# ─── Logging ─────────────────────────────────────────────────────
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "Pipeline started: $(date)"
+echo "Feature: $FEATURE"
+echo "Log: $LOG_FILE"
+
+# ─── Git branch ──────────────────────────────────────────────────
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ "$CURRENT_BRANCH" != feat/${FEATURE}* ]]; then
+    echo "Creating branch feat/${FEATURE}..."
+    git checkout -b "feat/${FEATURE}" 2>/dev/null || git checkout "feat/${FEATURE}"
+fi
+
+# ─── Git checkpoint for rollback ─────────────────────────────────
+CHECKPOINT_SHA=$(git rev-parse HEAD)
+echo "Checkpoint: $CHECKPOINT_SHA (use 'git reset --hard $CHECKPOINT_SHA' to rollback)"
+
+# ─── Generate fresh CONTEXT.md ───────────────────────────────────
+echo ""
+echo "Generating fresh CONTEXT.md for this pipeline run..."
+if [ -f "./pipeline/scripts/generate-context.sh" ]; then
+    ./pipeline/scripts/generate-context.sh
+fi
+
+# ─── Agent runner with timeout ───────────────────────────────────
+# Wraps an agent invocation with a timeout. Captures exit code.
+# Usage: run_agent <name> <timeout_seconds> <command...>
+run_agent() {
+    local name="$1"
+    local agent_timeout="$2"
+    shift 2
+
+    echo "  Starting $name (timeout: ${agent_timeout}s)..."
+    if timeout "$agent_timeout" "$@"; then
+        echo "  ✓ $name completed successfully."
+        return 0
+    else
+        local exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+            echo "  ✗ $name TIMED OUT after ${agent_timeout}s."
+        else
+            echo "  ✗ $name FAILED with exit code $exit_code."
+        fi
+        return $exit_code
+    fi
+}
+
+# ─── Complexity check helper ─────────────────────────────────────
+check_complexity() {
+    local output_file="$1"
+    local phase_name="$2"
+
+    if [ -f "$output_file" ] && grep -q "COMPLEXITY_LIMIT" "$output_file" 2>/dev/null; then
+        echo ""
+        echo "========================================================"
+        echo "  ⚠  COMPLEXITY LIMIT — Feature flagged as too large"
+        echo "========================================================"
+        echo ""
+        echo "  Detected in: $phase_name"
+        echo "  Decomposition: pipeline/specs/${FEATURE}-decomposition.md"
+        echo ""
+        echo "  To work on sub-tasks instead:"
+        echo "    1. Review the decomposition file"
+        echo "    2. Create specs for each sub-task"
+        echo "    3. Run: ./pipeline/scripts/dev-loop.sh <sub-task-name>"
+        echo ""
+
+        if [ "$FORCE" = true ]; then
+            echo "  --force flag set. Continuing anyway (not recommended)."
+            echo ""
+        else
+            echo "  To proceed anyway (not recommended):"
+            echo "    ./pipeline/scripts/dev-loop.sh ${FEATURE} --force"
+            echo ""
+            exit 0
+        fi
+    fi
+}
+
+# ─── Helper: should run phase? ───────────────────────────────────
+should_run() {
+    local phase=$1
+    if [ "$ONLY_PHASE" -ge 0 ]; then
+        [ "$phase" -eq "$ONLY_PHASE" ]
+    else
+        [ "$phase" -ge "$FROM_PHASE" ]
+    fi
+}
+
+# ─── Helper: require phase success ───────────────────────────────
+# Checks that a required file exists before continuing.
+require_file() {
+    local file="$1"
+    local description="$2"
+    if [ ! -f "$file" ]; then
+        echo ""
+        echo "  ✗ ERROR: $description not found at $file"
+        echo "  The previous phase may have failed. Check the log for details."
+        echo "  Aborting pipeline."
+        exit 1
+    fi
+}
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 0 — Spec Hardening (Gemini + Qwen, parallel, free)
+# ═════════════════════════════════════════════════════════════════
+if should_run 0; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 0 — Spec Hardening"
+    echo "══════════════════════════════════════════════════"
+
+    GEMINI_OUT="reviews/spec-critiques/${FEATURE}-gemini.md"
+    QWEN_OUT="reviews/spec-critiques/${FEATURE}-qwen.md"
+
+    echo "[0/6] Running Gemini + Qwen in parallel..."
+
+    GEMINI_EXIT=0
+    QWEN_EXIT=0
+
+    timeout "$AGENT_TIMEOUT" gemini -p "
+Read CONTEXT.md for full project state.
+Read the feature spec at ${SPEC_FILE}.
+Read GEMINI.md for your role and instructions.
+
+FIRST, assess whether this feature is too complex for a single pipeline run.
+Read pipeline/config.json for complexity thresholds. A feature is too complex
+if it exceeds any of: ${MAX_SCREENS} screens, ${MAX_COMPONENTS} new components,
+${MAX_API_ENDPOINTS} API endpoints, ${MAX_MODIFIED_FILES} modified files,
+${MAX_CODE_LINES} lines of new code, or contains independently-shippable parts.
+
+If too complex: output COMPLEXITY_LIMIT: This feature should be split.
+Generate a decomposition to pipeline/specs/${FEATURE}-decomposition.md. Stop.
+
+If not too complex: critique the spec for missing error states, unspecified
+technical constraints, accessibility gaps, conflicts with existing architecture,
+and ambiguous wording. Save to ${GEMINI_OUT}.
+" --yolo > /tmp/gemini-phase0.out 2>&1 &
+    GEMINI_PID=$!
+
+    timeout "$AGENT_TIMEOUT" qwen -p "
+Read CONTEXT.md for full project state.
+Read the feature spec at ${SPEC_FILE}.
+Read AGENTS.md for your role and instructions.
+
+FIRST, assess whether this feature is too complex for a single pipeline run.
+Read pipeline/config.json for complexity thresholds. A feature is too complex
+if it exceeds any of: ${MAX_SCREENS} screens, ${MAX_COMPONENTS} new components,
+${MAX_API_ENDPOINTS} API endpoints, ${MAX_MODIFIED_FILES} modified files,
+${MAX_CODE_LINES} lines of new code, or contains independently-shippable parts.
+
+If too complex: output COMPLEXITY_LIMIT: This feature should be split.
+Generate a decomposition to pipeline/specs/${FEATURE}-decomposition.md. Stop.
+
+If not too complex: critique the spec for ambiguous user flows, boundary
+conditions, race conditions, and cases where two developers would implement
+differently. Save to ${QWEN_OUT}.
+" -y > /tmp/qwen-phase0.out 2>&1 &
+    QWEN_PID=$!
+
+    wait $GEMINI_PID || GEMINI_EXIT=$?
+    wait $QWEN_PID || QWEN_EXIT=$?
+
+    if [ $GEMINI_EXIT -ne 0 ]; then
+        echo "  ⚠ Gemini exited with code $GEMINI_EXIT"
+    fi
+    if [ $QWEN_EXIT -ne 0 ]; then
+        echo "  ⚠ Qwen exited with code $QWEN_EXIT"
+    fi
+
+    # Only check complexity after both agents have finished
+    check_complexity /tmp/gemini-phase0.out "Phase 0 — Gemini spec review"
+    check_complexity /tmp/qwen-phase0.out "Phase 0 — Qwen spec review"
+
+    echo ""
+    echo "  Spec critiques ready:"
+    [ -f "$GEMINI_OUT" ] && echo "    - $GEMINI_OUT" || echo "    - $GEMINI_OUT (missing — Gemini may have failed)"
+    [ -f "$QWEN_OUT" ] && echo "    - $QWEN_OUT" || echo "    - $QWEN_OUT (missing — Qwen may have failed)"
+    echo ""
+    read -p "  Review both, update your spec, then press Enter to continue (or Ctrl+C to stop)..."
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 1 — Test Generation (Gemini + Qwen, parallel, free)
+# ═════════════════════════════════════════════════════════════════
+if should_run 1; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 1 — Test Generation"
+    echo "══════════════════════════════════════════════════"
+
+    echo "[1/6] Running Gemini (breadth) + Qwen (adversarial) in parallel..."
+
+    GEMINI_EXIT=0
+    QWEN_EXIT=0
+
+    timeout "$AGENT_TIMEOUT" gemini -p "
+Read CONTEXT.md for full project state.
+Read the feature spec at ${SPEC_FILE}.
+Read GEMINI.md for your role and instructions.
+
+Write comprehensive tests for this feature. Save to pipeline/tests/gemini/.
+Focus: happy paths, component rendering, accessibility, responsive, state transitions.
+After writing, run them once to verify they compile (failures expected).
+" --yolo &
+    GEMINI_PID=$!
+
+    timeout "$AGENT_TIMEOUT" qwen -p "
+Read CONTEXT.md for full project state.
+Read the feature spec at ${SPEC_FILE}.
+Read AGENTS.md for your role and instructions.
+
+Write adversarial tests for this feature. Save to pipeline/tests/qwen/.
+Focus: error states, empty/null data, boundary values, rapid interaction,
+network failures, malformed data, concurrent state changes.
+After writing, run them once to verify they compile.
+" -y &
+    QWEN_PID=$!
+
+    wait $GEMINI_PID || GEMINI_EXIT=$?
+    wait $QWEN_PID || QWEN_EXIT=$?
+
+    if [ $GEMINI_EXIT -ne 0 ]; then
+        echo "  ⚠ Gemini exited with code $GEMINI_EXIT"
+    fi
+    if [ $QWEN_EXIT -ne 0 ]; then
+        echo "  ⚠ Qwen exited with code $QWEN_EXIT"
+    fi
+
+    echo "  Phase 1 complete. Tests in pipeline/tests/gemini/ and pipeline/tests/qwen/."
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 2 — Planning (Claude Session A)
+# ═════════════════════════════════════════════════════════════════
+#
+# Cache strategy: CONTEXT.md + CLAUDE.md form the stable prefix.
+# Session A1 (merge + plan) writes to cache. Session A2 (revise)
+# uses --continue to reuse the warm cache at 90% discount.
+#
+# FIX: The original design tried to run all three tasks in a single
+# backgrounded Claude invocation, expecting Claude to "pause" and
+# wait for Gemini/Qwen reviews. Claude -p cannot pause — it runs
+# straight through. Now we split into two sequential invocations
+# (A1 and A2), with Gemini/Qwen reviews running between them.
+# ═════════════════════════════════════════════════════════════════
+if should_run 2; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 2 — Merge + Plan + Review + Revise"
+    echo "══════════════════════════════════════════════════"
+
+    # ── Session A1: Merge tests + generate plan ──────────────────
+    echo "  [2a/6] Claude: Merging test suites and generating plan..."
+
+    run_agent "Claude Session A1" "$AGENT_TIMEOUT" \
+        claude -p "
+Read CONTEXT.md for full project state. Read CLAUDE.md for your instructions.
+
+You have TWO tasks in this session.
+
+───────────────────────────────────────────────────
+TASK 1: Merge test suites
+───────────────────────────────────────────────────
+Two independently-generated test suites exist:
+- pipeline/tests/gemini/ — breadth tests (happy paths, accessibility)
+- pipeline/tests/qwen/ — adversarial tests (failures, edge cases)
+
+Merge into tests/:
+1. Read every test file in both directories
+2. Deduplicate (keep the more thorough version of overlapping tests)
+3. Resolve naming conflicts
+4. Fix all imports for consistency
+
+Run tests to verify compilation (failures expected — no implementation yet).
+Fix compilation errors only. Do NOT write implementation code.
+Report: total test count and brief coverage summary.
+
+───────────────────────────────────────────────────
+TASK 2: Generate implementation plan
+───────────────────────────────────────────────────
+Read the feature spec at ${SPEC_FILE}.
+Read the merged test suite in tests/.
+
+FIRST assess complexity using these thresholds from pipeline/config.json:
+- Max tests: ${MAX_TESTS}
+- Max new files: 8
+- Max new code lines: ${MAX_CODE_LINES}
+- Max independent concerns: 2
+
+If the feature exceeds these limits:
+  Output COMPLEXITY_LIMIT: This feature should be split.
+  Generate decomposition to pipeline/specs/${FEATURE}-decomposition.md. Stop entirely.
+
+Otherwise, generate an implementation plan to ${PLAN_FILE} covering:
+- Files to create or modify (one-line description each)
+- Component hierarchy (what renders what, key props)
+- State management (which stores, state shape, data flow)
+- New types or interfaces needed
+- Integration points with existing code
+- Implementation order (dependency-based)
+- Risk areas (complex logic, performance, tricky CSS)
+
+Do NOT write implementation code. Blueprint only.
+
+When BOTH tasks are complete, create a signal file:
+  echo 'done' > ${PLAN_DONE}
+" --dangerously-skip-permissions 2>&1 | tee /tmp/claude-sessionA1.out
+
+    # Extract session ID for --continue
+    SESSION_A_ID=$(grep -o 'session_id=[^ ]*' /tmp/claude-sessionA1.out 2>/dev/null | tail -1 | cut -d= -f2 || true)
+
+    check_complexity /tmp/claude-sessionA1.out "Session A1 — Claude plan generation"
+    require_file "$PLAN_FILE" "Implementation plan"
+
+    # ── Gemini + Qwen plan reviews (parallel, free) ──────────────
+    echo ""
+    echo "  [2b/6] Plan generated. Running Gemini + Qwen reviews..."
+
+    GEMINI_EXIT=0
+    QWEN_EXIT=0
+
+    timeout "$AGENT_TIMEOUT" gemini -p "
+Read CONTEXT.md for full project state. Read GEMINI.md for your role and instructions.
+Read the implementation plan at ${PLAN_FILE}.
+
+Review for: architectural consistency with existing patterns, unnecessary
+complexity, missed integration points, reusable existing components.
+Save to ${PLAN_GEMINI}.
+" --yolo &
+    GEMINI_PID=$!
+
+    timeout "$AGENT_TIMEOUT" qwen -p "
+Read CONTEXT.md for full project state. Read AGENTS.md for your role and instructions.
+Read ${PLAN_FILE}, ${SPEC_FILE}, and tests/.
+
+Review for: over-engineering, missing error handling paths, unnecessary
+state complexity, test scenarios the plan does not address.
+Save to ${PLAN_QWEN}.
+" -y &
+    QWEN_PID=$!
+
+    wait $GEMINI_PID || GEMINI_EXIT=$?
+    wait $QWEN_PID || QWEN_EXIT=$?
+
+    if [ $GEMINI_EXIT -ne 0 ]; then
+        echo "  ⚠ Gemini plan review exited with code $GEMINI_EXIT"
+    fi
+    if [ $QWEN_EXIT -ne 0 ]; then
+        echo "  ⚠ Qwen plan review exited with code $QWEN_EXIT"
+    fi
+
+    echo "  Plan reviews complete."
+
+    # ── Session A2: Revise plan based on reviews ─────────────────
+    echo ""
+    echo "  [2c/6] Claude: Revising plan based on reviews..."
+
+    # Build the revision prompt
+    REVISION_PROMPT="
+Read the plan reviews:
+- ${PLAN_GEMINI}
+- ${PLAN_QWEN}
+
+Revise ${PLAN_FILE} based on these reviews:
+- Address valid feedback by updating the plan
+- For feedback you disagree with, add a note explaining why
+- Add a '## Revision Notes' section at the end
+
+Report what you changed.
+"
+    # Try --continue if we have a session ID, otherwise start fresh
+    if [ -n "$SESSION_A_ID" ]; then
+        run_agent "Claude Session A2 (continue)" "$AGENT_TIMEOUT" \
+            claude -p "$REVISION_PROMPT" --continue "$SESSION_A_ID" --dangerously-skip-permissions \
+            2>&1 | tee /tmp/claude-sessionA2.out || \
+        run_agent "Claude Session A2 (fresh)" "$AGENT_TIMEOUT" \
+            claude -p "Read CONTEXT.md. Read CLAUDE.md. $REVISION_PROMPT" --dangerously-skip-permissions \
+            2>&1 | tee /tmp/claude-sessionA2.out
+    else
+        run_agent "Claude Session A2 (fresh)" "$AGENT_TIMEOUT" \
+            claude -p "Read CONTEXT.md. Read CLAUDE.md. $REVISION_PROMPT" --dangerously-skip-permissions \
+            2>&1 | tee /tmp/claude-sessionA2.out
+    fi
+
+    echo ""
+    echo "  Plan ready: $PLAN_FILE"
+    [ -f "$PLAN_GEMINI" ] && echo "  Reviews:    $PLAN_GEMINI"
+    [ -f "$PLAN_QWEN" ] && echo "              $PLAN_QWEN"
+    echo ""
+    read -p "  Review the plan, then press Enter to implement (or Ctrl+C to stop)..."
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 3 — Implementation (Claude Session B1)
+# ═════════════════════════════════════════════════════════════════
+if should_run 3; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 3 — Implementation"
+    echo "══════════════════════════════════════════════════"
+
+    echo "  [3/6] Implementing feature..."
+
+    run_agent "Claude Session B1 (implement)" "$AGENT_TIMEOUT" \
+        claude -p "
+Read CONTEXT.md for full project state. Read CLAUDE.md for your instructions.
+
+───────────────────────────────────────────────────
+Implement the feature
+───────────────────────────────────────────────────
+Read the feature spec at ${SPEC_FILE}.
+Read the implementation plan at ${PLAN_FILE}.
+Read the merged test suite in tests/.
+
+Before implementing: if at any point you find the scope exceeds
+single-session capacity or you are making quality compromises
+(skipping error handling, writing placeholder code, losing track of
+state across files), STOP. Output COMPLEXITY_LIMIT and save a partial
+decomposition to pipeline/specs/${FEATURE}-decomposition.md showing what is
+complete and what remains.
+
+Otherwise: implement following the plan exactly.
+- Create files in the order specified in the plan
+- Follow the component hierarchy and state approach
+- Run tests after each file or logical group of files
+- Fix implementation (NEVER modify tests) until all pass
+
+Once all tests pass, commit:
+  git add -A
+  git commit -m 'feat(${FEATURE}): implement feature'
+
+Then create a signal file:
+  echo 'done' > ${IMPL_DONE}
+
+Report: total tests passing, files created/modified.
+" --dangerously-skip-permissions 2>&1 | tee /tmp/claude-sessionB1.out
+
+    # Extract session ID for --continue in Phase 4
+    SESSION_B_ID=$(grep -o 'session_id=[^ ]*' /tmp/claude-sessionB1.out 2>/dev/null | tail -1 | cut -d= -f2 || true)
+
+    check_complexity /tmp/claude-sessionB1.out "Session B1 — Claude implementation"
+
+    # Verify implementation succeeded
+    if [ ! -f "$IMPL_DONE" ]; then
+        echo ""
+        echo "  ⚠ Implementation signal file not found."
+        echo "  Claude may have failed or hit complexity limits."
+        echo "  Check /tmp/claude-sessionB1.out for details."
+        echo ""
+        if [ "$FORCE" != true ]; then
+            echo "  Use --force to continue anyway, or fix and restart with --from 3"
+            exit 1
+        fi
+    fi
+
+    # ── Quality gates (hard failures) ────────────────────────────
+    echo ""
+    echo "  Running quality gates..."
+
+    QUALITY_PASS=true
+
+    # Test gate
+    if ! npm test 2>&1; then
+        echo "  ✗ TESTS FAILED"
+        QUALITY_PASS=false
+    else
+        echo "  ✓ Tests pass"
+    fi
+
+    # Lint gate
+    LINT_CMD=$(node -e "const c=require('./pipeline/config.json');console.log(c.commands?.lint||'')" 2>/dev/null || true)
+    if [ -n "$LINT_CMD" ]; then
+        if ! eval "$LINT_CMD" 2>&1; then
+            echo "  ✗ LINT FAILED"
+            QUALITY_PASS=false
+        else
+            echo "  ✓ Lint passes"
+        fi
+    fi
+
+    # Type check gate
+    if [ -f "tsconfig.json" ]; then
+        TYPECHECK_CMD=$(node -e "const c=require('./pipeline/config.json');console.log(c.commands?.typeCheck||'npx tsc --noEmit')" 2>/dev/null || echo "npx tsc --noEmit")
+        if ! eval "$TYPECHECK_CMD" 2>&1; then
+            echo "  ✗ TYPE CHECK FAILED"
+            QUALITY_PASS=false
+        else
+            echo "  ✓ Type check passes"
+        fi
+    fi
+
+    if [ "$QUALITY_PASS" = false ] && [ "$FORCE" != true ]; then
+        echo ""
+        echo "  ⚠ Quality gates failed. Fix issues before proceeding."
+        echo "  Use --force to skip quality gates, or fix and restart with --from 3"
+        exit 1
+    fi
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 4 — Adversarial Review (Qwen → Claude Session B2)
+# ═════════════════════════════════════════════════════════════════
+if should_run 4; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 4 — Adversarial Review + Fix"
+    echo "══════════════════════════════════════════════════"
+
+    # ── Qwen adversarial review ──────────────────────────────────
+    echo "  [4a/6] Running Qwen adversarial review..."
+
+    QWEN_EXIT=0
+    run_agent "Qwen adversarial review" "$AGENT_TIMEOUT" \
+        qwen -p "
+Read CONTEXT.md for full project state.
+Read AGENTS.md for your role and instructions.
+Read ${SPEC_FILE} and ${PLAN_FILE}.
+Read every file in src/ that was created or modified for this feature.
+Read every test in tests/.
+
+Find: spec compliance issues, security concerns (XSS, data exposure),
+robustness gaps (missing error handling, race conditions, cleanup),
+accessibility issues (missing ARIA, keyboard traps).
+
+Write additional tests to pipeline/tests/adversarial/.
+Save review summary to ${REVIEW_FILE}.
+Do NOT modify any files in src/.
+" -y 2>&1 | tee /tmp/qwen-phase4.out || QWEN_EXIT=$?
+
+    if [ $QWEN_EXIT -ne 0 ]; then
+        echo "  ⚠ Qwen adversarial review exited with code $QWEN_EXIT"
+    fi
+
+    # ── Claude fix adversarial failures ──────────────────────────
+    echo ""
+    echo "  [4b/6] Claude: Fixing adversarial review failures..."
+
+    FIX_PROMPT="
+Read the adversarial review at ${REVIEW_FILE}.
+Read the new adversarial tests in pipeline/tests/adversarial/.
+
+Run ALL tests (tests/ and pipeline/tests/adversarial/).
+If any new tests fail, fix the implementation in src/.
+NEVER modify or delete any tests.
+
+After all tests pass, commit:
+  git add -A
+  git commit -m 'fix(${FEATURE}): address adversarial review'
+
+Report: which adversarial tests failed, what you changed.
+"
+
+    if [ -n "$SESSION_B_ID" ]; then
+        run_agent "Claude Session B2 (continue)" "$AGENT_TIMEOUT" \
+            claude -p "$FIX_PROMPT" --continue "$SESSION_B_ID" --dangerously-skip-permissions \
+            2>&1 | tee /tmp/claude-sessionB2.out || \
+        run_agent "Claude Session B2 (fresh)" "$AGENT_TIMEOUT" \
+            claude -p "Read CONTEXT.md. Read CLAUDE.md. $FIX_PROMPT" --dangerously-skip-permissions \
+            2>&1 | tee /tmp/claude-sessionB2.out
+    else
+        run_agent "Claude Session B2 (fresh)" "$AGENT_TIMEOUT" \
+            claude -p "Read CONTEXT.md. Read CLAUDE.md. $FIX_PROMPT" --dangerously-skip-permissions \
+            2>&1 | tee /tmp/claude-sessionB2.out
+    fi
+
+    [ -f "$REVIEW_FILE" ] && echo "  Adversarial review: $REVIEW_FILE"
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 5 — Documentation (Gemini, free)
+# ═════════════════════════════════════════════════════════════════
+if should_run 5; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 5 — Documentation"
+    echo "══════════════════════════════════════════════════"
+
+    echo "[5/6] Gemini updating docs..."
+
+    GEMINI_EXIT=0
+    run_agent "Gemini documentation" "$AGENT_TIMEOUT" \
+        gemini -p "
+Read CONTEXT.md for full project state. Read GEMINI.md for your role and instructions.
+Read pipeline/plans/${FEATURE}-plan.md. Scan src/ for changes.
+
+Update these doc files with any changes from this feature:
+- docs/ARCHITECTURE.md — new directories, components, data flows
+- docs/DATA-MODEL.md — new TypeScript interfaces or type changes
+- docs/DEPENDENCIES.md — new packages installed
+- docs/DECISIONS.md — new architectural decisions (leave Reasoning blank)
+
+Do NOT remove existing content unless factually incorrect.
+Commit: git add docs/ && git commit -m 'docs(${FEATURE}): update documentation'
+" --yolo || GEMINI_EXIT=$?
+
+    if [ $GEMINI_EXIT -ne 0 ]; then
+        echo "  ⚠ Gemini documentation exited with code $GEMINI_EXIT"
+    fi
+
+    echo "  Phase 5 complete."
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# PHASE 6 — Context Regeneration (pure shell, no LLM cost)
+# ═════════════════════════════════════════════════════════════════
+if should_run 6; then
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Phase 6 — Context Regeneration"
+    echo "══════════════════════════════════════════════════"
+
+    echo "[6/6] Regenerating CONTEXT.md with final state..."
+
+    ./pipeline/scripts/generate-context.sh
+
+    echo "  Phase 6 complete."
+fi
+
+
+# ═════════════════════════════════════════════════════════════════
+# Cleanup
+# ═════════════════════════════════════════════════════════════════
+rm -f "$PLAN_DONE" "$IMPL_DONE" 2>/dev/null || true
+
+
+# ═════════════════════════════════════════════════════════════════
+# Summary
+# ═════════════════════════════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════════════════"
+echo "  Pipeline complete: $FEATURE"
+echo "══════════════════════════════════════════════════"
+echo ""
+echo "  Artifacts:"
+echo "    Spec:              $SPEC_FILE"
+echo "    Spec critiques:    pipeline/reviews/spec-critiques/"
+echo "    Tests:             tests/ + pipeline/tests/adversarial/"
+echo "    Plan:              $PLAN_FILE"
+echo "    Plan reviews:      pipeline/reviews/plan-reviews/"
+echo "    Adversarial review: $REVIEW_FILE"
+echo "    Context:           CONTEXT.md"
+echo "    Log:               $LOG_FILE"
+echo ""
+echo "  Rollback: git reset --hard $CHECKPOINT_SHA"
+echo ""
+echo "  Git log:"
+git log --oneline -10
+echo ""
+echo "  Your turn: review the diff, check the UI in browser,"
+echo "  and decide whether to merge or iterate."
+echo ""
+```
+
+
+
+### File: ./templates/scripts/generate-context.sh
+```
+#!/bin/bash
+set -euo pipefail
+
+# ─── Context Generator ──────────────────────────────────────────
+# Generates CONTEXT.md — a single, comprehensive, machine-readable
+# snapshot of the entire repository. This file is read by ALL LLM
+# agents at the start of EVERY session, replacing the need to scan
+# multiple doc files or source directories.
+#
+# Combines: docs/ARCHITECTURE.md + docs/CONVENTIONS.md +
+#           docs/DATA-MODEL.md + docs/DECISIONS.md +
+#           docs/DEPENDENCIES.md + live codebase scan
+#
+# Optimised for prompt caching: because this file is identical across
+# all agent invocations within a pipeline run, it forms the stable
+# prefix that gets cached at 90% discount on subsequent reads.
+#
+# COST: This script is pure shell — no LLM invocation needed.
+# It concatenates doc files and runs find/wc for the codebase scan.
+#
+# Usage:
+#   ./pipeline/scripts/generate-context.sh
+# ─────────────────────────────────────────────────────────────────
+
+echo "[context] Generating CONTEXT.md..."
+
+OUTPUT="CONTEXT.md"
+CONFIG_FILE="pipeline/config.json"
+
+# ─── Helper: inline a doc file or write a fallback ───────────────
+inline_doc() {
+    local file="$1"
+    local fallback="$2"
+    if [ -f "$file" ]; then
+        # Strip the first H1 heading line (we provide our own section heading)
+        sed '1{/^# /d;}' "$file"
+    else
+        echo "$fallback"
+    fi
+}
+
+# ─── Helper: generate file map for a directory ───────────────────
+file_map() {
+    local dir="$1"
+    if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+        echo "No source files yet. The $dir/ directory is empty."
+        return
+    fi
+    find "$dir" -type f \
+        -not -name '*.map' \
+        -not -path '*/node_modules/*' \
+        -not -name '.gitkeep' \
+        -not -name '.DS_Store' \
+        2>/dev/null | sort | while read -r f; do
+        local lines
+        lines=$(wc -l < "$f" 2>/dev/null || echo "0")
+        echo "- \`$f\` (${lines} lines)"
+    done
+}
+
+# ─── Helper: extract TypeScript interfaces ───────────────────────
+extract_types() {
+    if [ -d "src" ]; then
+        local found=false
+        grep -rn "^export \(interface\|type\) " src/ 2>/dev/null | while read -r line; do
+            found=true
+            echo "- $line"
+        done
+        if [ "$found" = false ]; then
+            echo "No exported types found in src/."
+        fi
+    else
+        echo "No src/ directory."
+    fi
+}
+
+# ─── Helper: extract React component tree ────────────────────────
+extract_components() {
+    if [ -d "src" ]; then
+        local count
+        count=$(grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | wc -l || echo "0")
+        if [ "$count" -gt 0 ]; then
+            echo "Found $count component files:"
+            grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | sort | while read -r f; do
+                local name
+                name=$(basename "$f" | sed 's/\.\(tsx\|jsx\)$//')
+                echo "- \`$f\` — $name"
+            done
+        else
+            echo "No components yet."
+        fi
+    else
+        echo "No components yet."
+    fi
+}
+
+# ─── Helper: extract store files ─────────────────────────────────
+extract_stores() {
+    if [ -d "src" ]; then
+        local stores
+        stores=$(find src/ -name '*store*' -o -name '*Store*' -o -name '*slice*' -o -name '*Slice*' 2>/dev/null | head -20)
+        if [ -n "$stores" ]; then
+            echo "$stores" | while read -r f; do
+                local lines
+                lines=$(wc -l < "$f" 2>/dev/null || echo "0")
+                echo "- \`$f\` (${lines} lines)"
+            done
+        else
+            echo "No stores yet."
+        fi
+    else
+        echo "No stores yet."
+    fi
+}
+
+# ─── Helper: extract API calls ───────────────────────────────────
+extract_api() {
+    if [ -d "src" ]; then
+        local found
+        found=$(grep -rn "fetch(\|axios\.\|\.get(\|\.post(\|\.put(\|\.delete(\|\.patch(" src/ 2>/dev/null | head -30)
+        if [ -n "$found" ]; then
+            echo "$found" | while read -r line; do
+                echo "- $line"
+            done
+        else
+            echo "No API calls yet."
+        fi
+    else
+        echo "No API calls yet."
+    fi
+}
+
+# ─── Helper: count tests ─────────────────────────────────────────
+count_tests() {
+    local dir="$1"
+    local label="$2"
+    if [ -d "$dir" ]; then
+        local files test_count
+        files=$(find "$dir" -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | wc -l || echo "0")
+        test_count=$(grep -r "it(\|test(" "$dir" 2>/dev/null | wc -l || echo "0")
+        echo "- **$label**: $files files, ~$test_count test cases"
+    fi
+}
+
+# ─── Helper: extract TODOs ───────────────────────────────────────
+extract_todos() {
+    if [ -d "src" ]; then
+        local todos
+        todos=$(grep -rn "TODO\|FIXME\|HACK\|XXX" src/ 2>/dev/null | head -30)
+        if [ -n "$todos" ]; then
+            echo "$todos" | while read -r line; do
+                echo "- $line"
+            done
+        else
+            echo "None found in source code."
+        fi
+    else
+        echo "None yet."
+    fi
+}
+
+# ─── Helper: feature status table ────────────────────────────────
+feature_status() {
+    if [ -d "pipeline/specs" ]; then
+        local specs
+        specs=$(find pipeline/specs/ -name '*.md' -not -name '_template.md' -not -name '*-decomposition.md' 2>/dev/null)
+        if [ -n "$specs" ]; then
+            echo "| Feature | Tests | Plan | Implementation | Review |"
+            echo "|---------|-------|------|----------------|--------|"
+            echo "$specs" | while read -r spec; do
+                local name
+                name=$(basename "$spec" .md)
+                local has_tests="—" has_plan="—" has_impl="—" has_review="—"
+                [ -d "tests" ] && [ -n "$(ls tests/ 2>/dev/null)" ] && has_tests="✓"
+                [ -f "pipeline/plans/${name}-plan.md" ] && has_plan="✓"
+                git log --oneline 2>/dev/null | grep -q "feat(${name})" && has_impl="✓"
+                [ -f "pipeline/reviews/adversarial/${name}-review.md" ] && has_review="✓"
+                echo "| $name | $has_tests | $has_plan | $has_impl | $has_review |"
+            done
+        else
+            echo "No features started yet."
+        fi
+    else
+        echo "No features started yet."
+    fi
+}
+
+# ─── Read tech stack from config ─────────────────────────────────
+TECH_STACK="See pipeline/config.json for details."
+COMMANDS="See pipeline/config.json for details."
+if [ -f "$CONFIG_FILE" ] && command -v node &> /dev/null; then
+    TECH_STACK=$(node -e "
+const c = require('./$CONFIG_FILE');
+const t = c.techStack || {};
+const parts = [t.framework, t.language, t.styling, t.testRunner, t.e2eRunner, t.stateManagement].filter(Boolean);
+console.log(parts.map(p => '- ' + p.charAt(0).toUpperCase() + p.slice(1)).join('\n'));
+" 2>/dev/null || echo "See pipeline/config.json for details.")
+
+    COMMANDS=$(node -e "
+const c = require('./$CONFIG_FILE');
+const cmd = c.commands || {};
+const lines = [];
+if (cmd.test) lines.push('- Test: \`' + cmd.test + '\`');
+if (cmd.lint) lines.push('- Lint: \`' + cmd.lint + '\`');
+if (cmd.typeCheck) lines.push('- Type check: \`' + cmd.typeCheck + '\`');
+if (cmd.dev) lines.push('- Dev: \`' + cmd.dev + '\`');
+console.log(lines.join('\n'));
+" 2>/dev/null || echo "See pipeline/config.json for details.")
+fi
+
+# ─── Build CONTEXT.md ────────────────────────────────────────────
+cat > "$OUTPUT" << 'HEADER'
+# Context
+
+> This file is auto-generated by `./pipeline/scripts/generate-context.sh`.
+> Do NOT edit manually. It is regenerated at the start and end of every pipeline run.
+> All LLM agents read this file before starting any task.
+> It combines all project documentation with a live codebase scan.
+
+HEADER
+
+{
+    # Project Summary
+    echo "## Project Summary"
+    echo ""
+    if [ -f "docs/ARCHITECTURE.md" ] && grep -q "\[Project overview" docs/ARCHITECTURE.md 2>/dev/null; then
+        echo "Project pipeline is set up. Architecture docs contain placeholders — fill them in after first implementation."
+    elif [ -f "docs/ARCHITECTURE.md" ]; then
+        # Extract the Overview section if it exists
+        sed -n '/^## Overview/,/^## /{ /^## Overview/d; /^## /d; p; }' docs/ARCHITECTURE.md 2>/dev/null | head -5
+    else
+        echo "New project. Pipeline infrastructure has been set up. No implementation yet."
+    fi
+    echo ""
+
+    # Tech Stack and Commands
+    echo "## Tech Stack and Commands"
+    echo ""
+    echo "$TECH_STACK"
+    echo ""
+    echo "$COMMANDS"
+    echo ""
+
+    # Conventions
+    echo "## Conventions"
+    echo ""
+    inline_doc "docs/CONVENTIONS.md" "No conventions documented yet."
+    echo ""
+
+    # Architecture
+    echo "## Architecture"
+    echo ""
+    inline_doc "docs/ARCHITECTURE.md" "No architecture documented yet."
+    echo ""
+
+    # Data Model
+    echo "## Data Model"
+    echo ""
+    inline_doc "docs/DATA-MODEL.md" "No types defined yet."
+    echo ""
+    echo "### Extracted Types from Source"
+    echo ""
+    extract_types
+    echo ""
+
+    # Architecture Decisions
+    echo "## Architecture Decisions"
+    echo ""
+    inline_doc "docs/DECISIONS.md" "No decisions recorded yet."
+    echo ""
+
+    # Dependencies
+    echo "## Dependencies"
+    echo ""
+    inline_doc "docs/DEPENDENCIES.md" "See package.json."
+    echo ""
+
+    # File Map
+    echo "## File Map"
+    echo ""
+    file_map "src"
+    echo ""
+
+    # Component Tree
+    echo "## Component Tree"
+    echo ""
+    extract_components
+    echo ""
+
+    # State Architecture
+    echo "## State Architecture"
+    echo ""
+    extract_stores
+    echo ""
+
+    # API Surface
+    echo "## API Surface"
+    echo ""
+    extract_api
+    echo ""
+
+    # Test Coverage Map
+    echo "## Test Coverage Map"
+    echo ""
+    count_tests "tests" "Merged tests"
+    count_tests "pipeline/tests/adversarial" "Adversarial tests"
+    count_tests "pipeline/tests/gemini" "Gemini breadth tests"
+    count_tests "pipeline/tests/qwen" "Qwen adversarial tests"
+    if [ ! -d "tests" ] || [ -z "$(find tests/ -name '*.test.*' -o -name '*.spec.*' 2>/dev/null)" ]; then
+        echo "No tests yet."
+    fi
+    echo ""
+
+    # Recent Changes
+    echo "## Recent Changes"
+    echo ""
+    if git rev-parse --is-inside-work-tree &> /dev/null 2>&1; then
+        local_log=$(git log --oneline -10 2>/dev/null)
+        if [ -n "$local_log" ]; then
+            echo "$local_log" | while read -r line; do
+                echo "- $line"
+            done
+        else
+            echo "No commits yet."
+        fi
+    else
+        echo "Not a git repository."
+    fi
+    echo ""
+
+    # Known Issues and TODOs
+    echo "## Known Issues and TODOs"
+    echo ""
+    extract_todos
+    echo ""
+
+    # Feature Status
+    echo "## Feature Status"
+    echo ""
+    feature_status
+    echo ""
+
+} >> "$OUTPUT"
+
+# ─── Report and commit ───────────────────────────────────────────
+if [ -f "$OUTPUT" ]; then
+    LINES=$(wc -l < "$OUTPUT")
+    echo "[context] Generated CONTEXT.md (${LINES} lines)"
+
+    if git rev-parse --is-inside-work-tree &> /dev/null 2>&1; then
+        git add CONTEXT.md
+        git commit -m "docs: update CONTEXT.md" 2>/dev/null || true
+    fi
+else
+    echo "[context] Warning: CONTEXT.md was not created"
+    exit 1
+fi
+
+echo "[context] Done."
+```
+
+
+
+### File: ./.vscode/settings.json
+```
+{
+    "window.title": "${rootPath}${separator}[main]"
+}```
+

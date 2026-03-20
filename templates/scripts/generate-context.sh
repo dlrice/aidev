@@ -61,12 +61,13 @@ file_map() {
 # ─── Helper: extract TypeScript interfaces ───────────────────────
 extract_types() {
     if [ -d "src" ]; then
-        local found=false
-        grep -rn "^export \(interface\|type\) " src/ 2>/dev/null | while read -r line; do
-            found=true
-            echo "- $line"
-        done
-        if [ "$found" = false ]; then
+        local output
+        output=$(grep -rnE "^export\s+(interface|type)\s+" src/ 2>/dev/null || true)
+        if [ -n "$output" ]; then
+            echo "$output" | while read -r line; do
+                echo "- $line"
+            done
+        else
             echo "No exported types found in src/."
         fi
     else
@@ -78,7 +79,7 @@ extract_types() {
 extract_components() {
     if [ -d "src" ]; then
         local count
-        count=$(grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | wc -l || echo "0")
+        count=$(grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
         if [ "$count" -gt 0 ]; then
             echo "Found $count component files:"
             grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | sort | while read -r f; do
@@ -342,15 +343,10 @@ HEADER
 
 } >> "$OUTPUT"
 
-# ─── Report and commit ───────────────────────────────────────────
+# ─── Report ───────────────────────────────────────────
 if [ -f "$OUTPUT" ]; then
     LINES=$(wc -l < "$OUTPUT")
     echo "[context] Generated CONTEXT.md (${LINES} lines)"
-
-    if git rev-parse --is-inside-work-tree &> /dev/null 2>&1; then
-        git add CONTEXT.md
-        git commit -m "docs: update CONTEXT.md" 2>/dev/null || true
-    fi
 else
     echo "[context] Warning: CONTEXT.md was not created"
     exit 1

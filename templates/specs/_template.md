@@ -49,3 +49,20 @@ over-building.]
 ## Technical Constraints
 [Performance budgets, browser support, accessibility level (WCAG AA),
 minimum viewport width, etc.]
+
+## Pipeline Phases
+[All phases are enabled by default. To skip a phase, add `skip` after the
+dash. This is useful when a phase doesn't fit your task — for example,
+skip "Test Generation" for a test-migration task, or skip "Adversarial
+Review" for a documentation-only change.]
+
+- Phase 0: Spec Hardening
+- Phase 1: Test Generation
+- Phase 2: Plan Generation
+- Phase 3: Implementation
+- Phase 4: Adversarial Review
+- Phase 5: Documentation
+- Phase 6: Context Regeneration
+
+<!-- Pipeline Log: auto-appended by dev-loop.sh as phases complete.
+     Shows agents used, duration, and status for each phase run. -->

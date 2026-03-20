@@ -13,7 +13,7 @@ const HELP = `
 
   Install into any repo:
     cd your-project
-    npx github:YOUR-USERNAME/dev-pipeline init
+    npx github:dlrice/dev-pipeline init
 `;
 
 async function main() {
