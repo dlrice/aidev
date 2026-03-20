@@ -118,6 +118,16 @@ echo ""
 # ═════════════════════════════════════════════════════════════════
 # Verify authentication status
 # ═════════════════════════════════════════════════════════════════
+# We check for credential files rather than running prompts, because
+# unauthenticated CLIs hang waiting for interactive browser login
+# even with timeouts and /dev/null stdin.
+#
+# Credential locations:
+#   Claude Code: ~/.claude/.credentials.json (Linux/Windows)
+#                macOS Keychain (macOS)
+#   Gemini CLI:  ~/.gemini/settings.json (created on first auth)
+#   Qwen Code:   ~/.qwen/settings.json (contains auth.selectedType)
+# ═════════════════════════════════════════════════════════════════
 echo "──────────────────────────────────────────"
 echo "  Checking authentication status..."
 echo "──────────────────────────────────────────"
@@ -125,10 +135,28 @@ echo ""
 
 AUTH_ISSUES=0
 
-# Claude auth check
+# ─── Claude Code auth ────────────────────────────────────────────
 if command -v claude &> /dev/null; then
-    # claude -p with a trivial prompt will fail if not authenticated
-    if claude -p "echo hello" --max-turns 1 > /dev/null 2>&1; then
+    CLAUDE_AUTHED=false
+
+    # Linux/Windows: check credentials file
+    if [ -f "$HOME/.claude/.credentials.json" ]; then
+        CLAUDE_AUTHED=true
+    fi
+
+    # macOS: check Keychain for stored credentials
+    if [ "$CLAUDE_AUTHED" = false ] && [ "$(uname)" = "Darwin" ]; then
+        if security find-generic-password -s "claude-code" > /dev/null 2>&1; then
+            CLAUDE_AUTHED=true
+        fi
+    fi
+
+    # Fallback: check for ANTHROPIC_API_KEY env var
+    if [ "$CLAUDE_AUTHED" = false ] && [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+        CLAUDE_AUTHED=true
+    fi
+
+    if [ "$CLAUDE_AUTHED" = true ]; then
         echo -e "   ${GREEN}✓${NC} Claude Code: authenticated"
     else
         echo -e "   ${YELLOW}⚠${NC} Claude Code: not authenticated"
@@ -139,9 +167,26 @@ else
     AUTH_ISSUES=$((AUTH_ISSUES + 1))
 fi
 
-# Gemini auth check
+# ─── Gemini CLI auth ─────────────────────────────────────────────
 if command -v gemini &> /dev/null; then
-    if gemini -p "echo hello" --sandbox > /dev/null 2>&1; then
+    GEMINI_AUTHED=false
+
+    # Check for settings file (created after first successful auth)
+    if [ -f "$HOME/.gemini/settings.json" ]; then
+        GEMINI_AUTHED=true
+    fi
+
+    # Also check Application Default Credentials (gcloud auth)
+    if [ "$GEMINI_AUTHED" = false ] && [ -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
+        GEMINI_AUTHED=true
+    fi
+
+    # Fallback: check for GEMINI_API_KEY env var
+    if [ "$GEMINI_AUTHED" = false ] && [ -n "${GEMINI_API_KEY:-}" ]; then
+        GEMINI_AUTHED=true
+    fi
+
+    if [ "$GEMINI_AUTHED" = true ]; then
         echo -e "   ${GREEN}✓${NC} Gemini CLI: authenticated"
     else
         echo -e "   ${YELLOW}⚠${NC} Gemini CLI: not authenticated"
@@ -152,9 +197,24 @@ else
     AUTH_ISSUES=$((AUTH_ISSUES + 1))
 fi
 
-# Qwen auth check
+# ─── Qwen Code auth ──────────────────────────────────────────────
 if command -v qwen &> /dev/null; then
-    if qwen -p "echo hello" --max-turns 1 > /dev/null 2>&1; then
+    QWEN_AUTHED=false
+
+    # Check settings.json for an auth type selection
+    if [ -f "$HOME/.qwen/settings.json" ]; then
+        # Look for selectedType being set (indicates completed auth)
+        if grep -q '"selectedType"' "$HOME/.qwen/settings.json" 2>/dev/null; then
+            QWEN_AUTHED=true
+        fi
+    fi
+
+    # Fallback: check for OPENAI_API_KEY env var (Qwen's API key mode)
+    if [ "$QWEN_AUTHED" = false ] && [ -n "${OPENAI_API_KEY:-}" ]; then
+        QWEN_AUTHED=true
+    fi
+
+    if [ "$QWEN_AUTHED" = true ]; then
         echo -e "   ${GREEN}✓${NC} Qwen Code: authenticated"
     else
         echo -e "   ${YELLOW}⚠${NC} Qwen Code: not authenticated"
