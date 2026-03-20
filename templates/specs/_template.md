@@ -13,6 +13,11 @@ If any answer suggests this is too large, split into multiple specs first.]
 - How many existing files modified? [aim for under 10 per spec]
 - Could any part of this feature ship independently? [if yes, split it out]
 
+## Dependencies
+[List any features or specs that must be completed before this one.
+If none, write "None — this feature is self-contained."]
+- [spec-name] — [what this feature needs from it]
+
 ## User Story
 As a [type of user], I want to [action], so that [benefit].
 

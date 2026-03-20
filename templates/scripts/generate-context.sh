@@ -15,100 +15,341 @@ set -euo pipefail
 # all agent invocations within a pipeline run, it forms the stable
 # prefix that gets cached at 90% discount on subsequent reads.
 #
+# COST: This script is pure shell — no LLM invocation needed.
+# It concatenates doc files and runs find/wc for the codebase scan.
+#
 # Usage:
 #   ./scripts/generate-context.sh
 # ─────────────────────────────────────────────────────────────────
 
 echo "[context] Generating CONTEXT.md..."
 
-claude -p "
-You are generating CONTEXT.md — a single file that ALL LLM agents read before
-every task. It must give complete, accurate understanding of this project
-without reading any other file.
+OUTPUT="CONTEXT.md"
+CONFIG_FILE="pipeline.config.json"
 
-Read every file in docs/ (ARCHITECTURE.md, CONVENTIONS.md, DATA-MODEL.md,
-DECISIONS.md, DEPENDENCIES.md). Scan src/, tests/, specs/, plans/, and all
-config files. Read package.json and any lock files.
+# ─── Helper: inline a doc file or write a fallback ───────────────
+inline_doc() {
+    local file="$1"
+    local fallback="$2"
+    if [ -f "$file" ]; then
+        # Strip the first H1 heading line (we provide our own section heading)
+        sed '1{/^# /d;}' "$file"
+    else
+        echo "$fallback"
+    fi
+}
 
-Generate CONTEXT.md with ALL of the following sections. Do not skip any.
+# ─── Helper: generate file map for a directory ───────────────────
+file_map() {
+    local dir="$1"
+    if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+        echo "No source files yet. The $dir/ directory is empty."
+        return
+    fi
+    find "$dir" -type f \
+        -not -name '*.map' \
+        -not -path '*/node_modules/*' \
+        -not -name '.gitkeep' \
+        -not -name '.DS_Store' \
+        2>/dev/null | sort | while read -r f; do
+        local lines
+        lines=$(wc -l < "$f" 2>/dev/null || echo "0")
+        echo "- \`$f\` (${lines} lines)"
+    done
+}
 
-## Project Summary
-One paragraph: what this project does, who it is for, current stage.
+# ─── Helper: extract TypeScript interfaces ───────────────────────
+extract_types() {
+    if [ -d "src" ]; then
+        local found=false
+        grep -rn "^export \(interface\|type\) " src/ 2>/dev/null | while read -r line; do
+            found=true
+            echo "- $line"
+        done
+        if [ "$found" = false ]; then
+            echo "No exported types found in src/."
+        fi
+    else
+        echo "No src/ directory."
+    fi
+}
 
-## Tech Stack and Commands
-List the framework, language, styling, test runner, state management,
-package manager. List the exact commands for test, lint, type check, dev.
+# ─── Helper: extract React component tree ────────────────────────
+extract_components() {
+    if [ -d "src" ]; then
+        local count
+        count=$(grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | wc -l || echo "0")
+        if [ "$count" -gt 0 ]; then
+            echo "Found $count component files:"
+            grep -rl "export.*function\|export.*const.*=.*(" src/ --include='*.tsx' --include='*.jsx' 2>/dev/null | sort | while read -r f; do
+                local name
+                name=$(basename "$f" | sed 's/\.\(tsx\|jsx\)$//')
+                echo "- \`$f\` — $name"
+            done
+        else
+            echo "No components yet."
+        fi
+    else
+        echo "No components yet."
+    fi
+}
 
-## Conventions
-Merge all content from docs/CONVENTIONS.md. Include naming rules, component
-rules, state management patterns, testing conventions.
+# ─── Helper: extract store files ─────────────────────────────────
+extract_stores() {
+    if [ -d "src" ]; then
+        local stores
+        stores=$(find src/ -name '*store*' -o -name '*Store*' -o -name '*slice*' -o -name '*Slice*' 2>/dev/null | head -20)
+        if [ -n "$stores" ]; then
+            echo "$stores" | while read -r f; do
+                local lines
+                lines=$(wc -l < "$f" 2>/dev/null || echo "0")
+                echo "- \`$f\` (${lines} lines)"
+            done
+        else
+            echo "No stores yet."
+        fi
+    else
+        echo "No stores yet."
+    fi
+}
 
-## Architecture
-Merge all content from docs/ARCHITECTURE.md. Include directory map, data
-flow, key patterns.
+# ─── Helper: extract API calls ───────────────────────────────────
+extract_api() {
+    if [ -d "src" ]; then
+        local found
+        found=$(grep -rn "fetch(\|axios\.\|\.get(\|\.post(\|\.put(\|\.delete(\|\.patch(" src/ 2>/dev/null | head -30)
+        if [ -n "$found" ]; then
+            echo "$found" | while read -r line; do
+                echo "- $line"
+            done
+        else
+            echo "No API calls yet."
+        fi
+    else
+        echo "No API calls yet."
+    fi
+}
 
-## Data Model
-Merge all content from docs/DATA-MODEL.md. List every TypeScript interface
-and type alias with fields and canonical source file.
+# ─── Helper: count tests ─────────────────────────────────────────
+count_tests() {
+    local dir="$1"
+    local label="$2"
+    if [ -d "$dir" ]; then
+        local files test_count
+        files=$(find "$dir" -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | wc -l || echo "0")
+        test_count=$(grep -r "it(\|test(" "$dir" 2>/dev/null | wc -l || echo "0")
+        echo "- **$label**: $files files, ~$test_count test cases"
+    fi
+}
 
-## Architecture Decisions
-Merge all content from docs/DECISIONS.md. Include decision number, what was
-chosen, alternatives, and reasoning.
+# ─── Helper: extract TODOs ───────────────────────────────────────
+extract_todos() {
+    if [ -d "src" ]; then
+        local todos
+        todos=$(grep -rn "TODO\|FIXME\|HACK\|XXX" src/ 2>/dev/null | head -30)
+        if [ -n "$todos" ]; then
+            echo "$todos" | while read -r line; do
+                echo "- $line"
+            done
+        else
+            echo "None found in source code."
+        fi
+    else
+        echo "None yet."
+    fi
+}
 
-## Dependencies
-Merge all content from docs/DEPENDENCIES.md. For any new packages not yet
-documented, add them by reading package.json.
+# ─── Helper: feature status table ────────────────────────────────
+feature_status() {
+    if [ -d "specs" ]; then
+        local specs
+        specs=$(find specs/ -name '*.md' -not -name '_template.md' -not -name '*-decomposition.md' 2>/dev/null)
+        if [ -n "$specs" ]; then
+            echo "| Feature | Tests | Plan | Implementation | Review |"
+            echo "|---------|-------|------|----------------|--------|"
+            echo "$specs" | while read -r spec; do
+                local name
+                name=$(basename "$spec" .md)
+                local has_tests="—" has_plan="—" has_impl="—" has_review="—"
+                [ -d "tests/merged" ] && [ -n "$(ls tests/merged/ 2>/dev/null)" ] && has_tests="✓"
+                [ -f "plans/${name}-plan.md" ] && has_plan="✓"
+                git log --oneline 2>/dev/null | grep -q "feat(${name})" && has_impl="✓"
+                [ -f "reviews/adversarial/${name}-review.md" ] && has_review="✓"
+                echo "| $name | $has_tests | $has_plan | $has_impl | $has_review |"
+            done
+        else
+            echo "No features started yet."
+        fi
+    else
+        echo "No features started yet."
+    fi
+}
 
-## File Map
-Every file in src/ with a one-line description and line count, grouped by
-directory. If src/ is empty, say so.
+# ─── Read tech stack from config ─────────────────────────────────
+TECH_STACK="See pipeline.config.json for details."
+COMMANDS="See pipeline.config.json for details."
+if [ -f "$CONFIG_FILE" ] && command -v node &> /dev/null; then
+    TECH_STACK=$(node -e "
+const c = require('./$CONFIG_FILE');
+const t = c.techStack || {};
+const parts = [t.framework, t.language, t.styling, t.testRunner, t.e2eRunner, t.stateManagement].filter(Boolean);
+console.log(parts.map(p => '- ' + p.charAt(0).toUpperCase() + p.slice(1)).join('\n'));
+" 2>/dev/null || echo "See pipeline.config.json for details.")
 
-## Component Tree
-React component hierarchy as a tree. Show parent-child and key props.
-If no components exist, say so.
+    COMMANDS=$(node -e "
+const c = require('./$CONFIG_FILE');
+const cmd = c.commands || {};
+const lines = [];
+if (cmd.test) lines.push('- Test: \`' + cmd.test + '\`');
+if (cmd.lint) lines.push('- Lint: \`' + cmd.lint + '\`');
+if (cmd.typeCheck) lines.push('- Type check: \`' + cmd.typeCheck + '\`');
+if (cmd.dev) lines.push('- Dev: \`' + cmd.dev + '\`');
+console.log(lines.join('\n'));
+" 2>/dev/null || echo "See pipeline.config.json for details.")
+fi
 
-## State Architecture
-Which stores exist, their state shapes, which components read/write each.
-If no stores exist, say so.
+# ─── Build CONTEXT.md ────────────────────────────────────────────
+cat > "$OUTPUT" << 'HEADER'
+# Context
 
-## API Surface
-Every API endpoint consumed, the calling function, request/response types.
-If no API calls exist, say so.
+> This file is auto-generated by `./scripts/generate-context.sh`.
+> Do NOT edit manually. It is regenerated at the start and end of every pipeline run.
+> All LLM agents read this file before starting any task.
+> It combines all project documentation with a live codebase scan.
 
-## Test Coverage Map
-For each feature area: which test files, test count, categories
-(unit/integration/e2e/adversarial), and gaps.
+HEADER
 
-## Recent Changes
-Last 10 git commits with messages. If no commits, say so.
+{
+    # Project Summary
+    echo "## Project Summary"
+    echo ""
+    if [ -f "docs/ARCHITECTURE.md" ] && grep -q "\[Project overview" docs/ARCHITECTURE.md 2>/dev/null; then
+        echo "Project pipeline is set up. Architecture docs contain placeholders — fill them in after first implementation."
+    elif [ -f "docs/ARCHITECTURE.md" ]; then
+        # Extract the Overview section if it exists
+        sed -n '/^## Overview/,/^## /{ /^## Overview/d; /^## /d; p; }' docs/ARCHITECTURE.md 2>/dev/null | head -5
+    else
+        echo "New project. Pipeline infrastructure has been set up. No implementation yet."
+    fi
+    echo ""
 
-## Known Issues and TODOs
-TODO comments in code, known bugs, unresolved review findings.
+    # Tech Stack and Commands
+    echo "## Tech Stack and Commands"
+    echo ""
+    echo "$TECH_STACK"
+    echo ""
+    echo "$COMMANDS"
+    echo ""
 
-## Feature Status
-For each spec in specs/: whether tests, plan, implementation, and review
-are complete. Format as a table.
+    # Conventions
+    echo "## Conventions"
+    echo ""
+    inline_doc "docs/CONVENTIONS.md" "No conventions documented yet."
+    echo ""
 
-RULES:
-- Be factual. Describe what IS, not what should be.
-- Include line counts for every source file.
-- This file must be SELF-CONTAINED. An agent reading ONLY this file should
-  understand the entire project.
-- Do NOT include instructions like 'read docs/ARCHITECTURE.md' — the content
-  from those files should be INLINE in this file.
-- If a section has no content yet (empty project), write a one-line note
-  saying so rather than omitting the section.
+    # Architecture
+    echo "## Architecture"
+    echo ""
+    inline_doc "docs/ARCHITECTURE.md" "No architecture documented yet."
+    echo ""
 
-Save to CONTEXT.md in the project root. Overwrite if it exists.
-" --dangerously-skip-permissions
+    # Data Model
+    echo "## Data Model"
+    echo ""
+    inline_doc "docs/DATA-MODEL.md" "No types defined yet."
+    echo ""
+    echo "### Extracted Types from Source"
+    echo ""
+    extract_types
+    echo ""
 
-if [ -f "CONTEXT.md" ]; then
-    LINES=$(wc -l < CONTEXT.md)
+    # Architecture Decisions
+    echo "## Architecture Decisions"
+    echo ""
+    inline_doc "docs/DECISIONS.md" "No decisions recorded yet."
+    echo ""
+
+    # Dependencies
+    echo "## Dependencies"
+    echo ""
+    inline_doc "docs/DEPENDENCIES.md" "See package.json."
+    echo ""
+
+    # File Map
+    echo "## File Map"
+    echo ""
+    file_map "src"
+    echo ""
+
+    # Component Tree
+    echo "## Component Tree"
+    echo ""
+    extract_components
+    echo ""
+
+    # State Architecture
+    echo "## State Architecture"
+    echo ""
+    extract_stores
+    echo ""
+
+    # API Surface
+    echo "## API Surface"
+    echo ""
+    extract_api
+    echo ""
+
+    # Test Coverage Map
+    echo "## Test Coverage Map"
+    echo ""
+    count_tests "tests/merged" "Merged tests"
+    count_tests "tests/adversarial" "Adversarial tests"
+    count_tests "tests/gemini" "Gemini breadth tests"
+    count_tests "tests/qwen" "Qwen adversarial tests"
+    if [ ! -d "tests" ] || [ -z "$(find tests/ -name '*.test.*' -o -name '*.spec.*' 2>/dev/null)" ]; then
+        echo "No tests yet."
+    fi
+    echo ""
+
+    # Recent Changes
+    echo "## Recent Changes"
+    echo ""
+    if git rev-parse --is-inside-work-tree &> /dev/null 2>&1; then
+        local_log=$(git log --oneline -10 2>/dev/null)
+        if [ -n "$local_log" ]; then
+            echo "$local_log" | while read -r line; do
+                echo "- $line"
+            done
+        else
+            echo "No commits yet."
+        fi
+    else
+        echo "Not a git repository."
+    fi
+    echo ""
+
+    # Known Issues and TODOs
+    echo "## Known Issues and TODOs"
+    echo ""
+    extract_todos
+    echo ""
+
+    # Feature Status
+    echo "## Feature Status"
+    echo ""
+    feature_status
+    echo ""
+
+} >> "$OUTPUT"
+
+# ─── Report and commit ───────────────────────────────────────────
+if [ -f "$OUTPUT" ]; then
+    LINES=$(wc -l < "$OUTPUT")
     echo "[context] Generated CONTEXT.md (${LINES} lines)"
 
     if git rev-parse --is-inside-work-tree &> /dev/null 2>&1; then
         git add CONTEXT.md
-        git commit -m "docs: update CONTEXT.md" --no-verify 2>/dev/null || true
+        git commit -m "docs: update CONTEXT.md" 2>/dev/null || true
     fi
 else
     echo "[context] Warning: CONTEXT.md was not created"

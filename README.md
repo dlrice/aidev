@@ -17,13 +17,19 @@ The `init` command will:
 3. Generate all pipeline files (agent instructions, scripts, config, doc stubs)
 4. Tell you what to do next
 
+**Private repos:** If your repo is private, ensure the user has `gh auth login` configured or use a personal access token. Install with:
+
+```bash
+npx github:YOUR-USERNAME/dev-pipeline#main init
+```
+
 ## Commands
 
 ```bash
 # Onboard the pipeline into a new repo
 npx github:YOUR-USERNAME/dev-pipeline init
 
-# Update pipeline scripts in an existing repo (preserves your config and docs)
+# Update pipeline scripts in an existing repo (preserves config and docs)
 npx github:YOUR-USERNAME/dev-pipeline update
 
 # Check that all tools are installed
@@ -52,12 +58,12 @@ cp specs/_template.md specs/my-feature.md
 | Phase | Agent(s) | Purpose |
 |-------|----------|---------|
 | 0 — Spec Hardening | Gemini + Qwen | Find gaps and ambiguity in your spec |
-| 1 — Test Generation | Gemini + Qwen → Claude | Write tests from different angles, merge |
-| 2 — Plan Generation | Claude → Gemini + Qwen → Claude | Create and review implementation blueprint |
+| 1 — Test Generation | Gemini + Qwen | Write tests from different angles |
+| 2 — Plan Generation | Claude → Gemini + Qwen → Claude | Merge tests, create plan, review, revise |
 | 3 — Implementation | Claude | Write code to pass all tests |
 | 4 — Adversarial Review | Qwen → Claude | Find remaining gaps, write more tests, fix |
 | 5 — Documentation | Gemini | Update project docs |
-| 6 — Context Regen | Claude | Regenerate CONTEXT.md (merged docs + codebase scan) |
+| 6 — Context Regen | Shell script (no LLM) | Regenerate CONTEXT.md from docs + codebase |
 
 ## What gets generated
 
@@ -92,10 +98,24 @@ npx github:YOUR-USERNAME/dev-pipeline update
 
 This updates the scripts to the latest version while preserving your config, docs, specs, reviews, and any customisations to agent instruction files.
 
+## Platform Support
+
+The pipeline scripts require **bash** and standard Unix utilities (`find`, `grep`, `wc`, `sed`, `timeout`).
+
+| Platform | Support |
+|----------|---------|
+| macOS | Full support |
+| Linux | Full support |
+| Windows (WSL) | Full support — run all commands inside WSL |
+| Windows (native) | Not supported — use WSL |
+
+**Note on `--dangerously-skip-permissions`:** The pipeline uses this flag to allow Claude Code to run without interactive permission prompts. This gives Claude unrestricted filesystem and command access during pipeline runs. Review the generated CLAUDE.md instructions to understand what Claude is permitted to do.
+
 ## Requirements
 
 - Node.js 18+
 - Git
+- bash (macOS/Linux native, or WSL on Windows)
 - Claude Pro subscription ($20/mo)
 - Google account (for Gemini CLI)
 - Qwen account (for Qwen Code — free at qwen.ai)
