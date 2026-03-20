@@ -51,20 +51,15 @@ echo "Installing CLI agents..."
 echo ""
 
 # ─── Claude Code ─────────────────────────────────────────────────
-# Docs: https://code.claude.com/docs/en/setup
-# Requires: Claude Pro, Max, Teams, or Enterprise account ($20/mo+)
-# Auth: OAuth browser login on first run
 echo -e "${BOLD}1. Claude Code${NC}"
 if command -v claude &> /dev/null; then
     CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
     echo -e "   ${GREEN}✓${NC} Already installed (${CLAUDE_VERSION})"
 else
     echo "   Installing Claude Code..."
-    # Prefer the official installer (avoids npm permission issues)
     if curl -fsSL https://claude.ai/install.sh | bash 2>/dev/null; then
         echo -e "   ${GREEN}✓${NC} Claude Code installed via official installer"
     else
-        # Fallback to npm
         echo "   Official installer failed, trying npm..."
         npm install -g @anthropic-ai/claude-code
         echo -e "   ${GREEN}✓${NC} Claude Code installed via npm"
@@ -73,9 +68,6 @@ fi
 echo ""
 
 # ─── Gemini CLI ──────────────────────────────────────────────────
-# Docs: https://github.com/google-gemini/gemini-cli
-# Requires: Google account (free tier: 60 req/min, 1000 req/day)
-# Auth: OAuth browser login on first run
 echo -e "${BOLD}2. Gemini CLI${NC}"
 if command -v gemini &> /dev/null; then
     GEMINI_VERSION=$(gemini --version 2>/dev/null || echo "unknown")
@@ -88,9 +80,6 @@ fi
 echo ""
 
 # ─── Qwen Code ───────────────────────────────────────────────────
-# Docs: https://github.com/QwenLM/qwen-code
-# Requires: Qwen account (free at qwen.ai) or API key
-# Auth: OAuth browser login on first interactive run
 echo -e "${BOLD}3. Qwen Code${NC}"
 if command -v qwen &> /dev/null; then
     QWEN_VERSION=$(qwen --version 2>/dev/null || echo "unknown")
@@ -108,7 +97,6 @@ else
         else
             echo -e "   ${YELLOW}⚠${NC} Qwen Code installed but not on PATH."
             echo "     You may need to restart your terminal or add it to your PATH."
-            echo "     Check: https://github.com/QwenLM/qwen-code#installation"
         fi
     fi
 fi
@@ -116,17 +104,7 @@ echo ""
 
 
 # ═════════════════════════════════════════════════════════════════
-# Verify authentication status
-# ═════════════════════════════════════════════════════════════════
-# We check for credential files rather than running prompts, because
-# unauthenticated CLIs hang waiting for interactive browser login
-# even with timeouts and /dev/null stdin.
-#
-# Credential locations:
-#   Claude Code: ~/.claude/.credentials.json (Linux/Windows)
-#                macOS Keychain (macOS)
-#   Gemini CLI:  ~/.gemini/settings.json (created on first auth)
-#   Qwen Code:   ~/.qwen/settings.json (contains auth.selectedType)
+# Verify authentication status (Best Practices)
 # ═════════════════════════════════════════════════════════════════
 echo "──────────────────────────────────────────"
 echo "  Checking authentication status..."
@@ -136,23 +114,15 @@ echo ""
 AUTH_ISSUES=0
 
 # ─── Claude Code auth ────────────────────────────────────────────
+# Best practice: Claude Code has a dedicated, non-interactive command
+# `claude auth status` that exits 0 if authenticated, 1 if not.
 if command -v claude &> /dev/null; then
     CLAUDE_AUTHED=false
 
-    # Linux/Windows: check credentials file
-    if [ -f "$HOME/.claude/.credentials.json" ]; then
+    if claude auth status >/dev/null 2>&1; then
         CLAUDE_AUTHED=true
-    fi
-
-    # macOS: check Keychain for stored credentials
-    if [ "$CLAUDE_AUTHED" = false ] && [ "$(uname)" = "Darwin" ]; then
-        if security find-generic-password -s "claude-code" > /dev/null 2>&1; then
-            CLAUDE_AUTHED=true
-        fi
-    fi
-
-    # Fallback: check for ANTHROPIC_API_KEY env var
-    if [ "$CLAUDE_AUTHED" = false ] && [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    # Fallback to checking the environment variable (highest priority in non-interactive mode)
+    elif [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
         CLAUDE_AUTHED=true
     fi
 
@@ -168,21 +138,19 @@ else
 fi
 
 # ─── Gemini CLI auth ─────────────────────────────────────────────
+# Best practice: Gemini CLI relies heavily on GCP ADC or explicit API keys. 
+# We check standard env vars first, then ADC, then local cached settings.
 if command -v gemini &> /dev/null; then
     GEMINI_AUTHED=false
 
-    # Check for settings file (created after first successful auth)
-    if [ -f "$HOME/.gemini/settings.json" ]; then
+    # 1. Check for standard Environment Variables
+    if [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ]; then
         GEMINI_AUTHED=true
-    fi
-
-    # Also check Application Default Credentials (gcloud auth)
-    if [ "$GEMINI_AUTHED" = false ] && [ -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
+    # 2. Check for Application Default Credentials (GCP)
+    elif [ -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
         GEMINI_AUTHED=true
-    fi
-
-    # Fallback: check for GEMINI_API_KEY env var
-    if [ "$GEMINI_AUTHED" = false ] && [ -n "${GEMINI_API_KEY:-}" ]; then
+    # 3. Check for settings file (created after successful OAuth via `gemini /auth`)
+    elif [ -f "$HOME/.gemini/settings.json" ]; then
         GEMINI_AUTHED=true
     fi
 
@@ -198,19 +166,19 @@ else
 fi
 
 # ─── Qwen Code auth ──────────────────────────────────────────────
+# Best practice: Qwen Code uses OAuth by default (saving to oauth_creds.json),
+# or standard OpenAI-compatible API keys set via settings.json or Env Vars.
 if command -v qwen &> /dev/null; then
     QWEN_AUTHED=false
 
-    # Check settings.json for an auth type selection
-    if [ -f "$HOME/.qwen/settings.json" ]; then
-        # Look for selectedType being set (indicates completed auth)
-        if grep -q '"selectedType"' "$HOME/.qwen/settings.json" 2>/dev/null; then
-            QWEN_AUTHED=true
-        fi
-    fi
-
-    # Fallback: check for OPENAI_API_KEY env var (Qwen's API key mode)
-    if [ "$QWEN_AUTHED" = false ] && [ -n "${OPENAI_API_KEY:-}" ]; then
+    # 1. Check for Qwen OAuth credentials (recommended free tier)
+    if [ -f "$HOME/.qwen/oauth_creds.json" ]; then
+        QWEN_AUTHED=true
+    # 2. Check settings.json for an explicit auth type selection
+    elif [ -f "$HOME/.qwen/settings.json" ] && grep -q '"selectedType"' "$HOME/.qwen/settings.json" 2>/dev/null; then
+        QWEN_AUTHED=true
+    # 3. Fallback: check standard environment variables
+    elif [ -n "${OPENAI_API_KEY:-}" ] || [ -n "${DASHSCOPE_API_KEY:-}" ]; then
         QWEN_AUTHED=true
     fi
 
@@ -321,23 +289,20 @@ if [ "$AUTH_ISSUES" -gt 0 ]; then
     echo ""
     echo "  ┌──────────────────────────────────────────────────────────────┐"
     echo "  │                                                              │"
-    echo -e "  │  ${BOLD}Claude Code${NC}                                                │"
+    echo -e "  │  ${BOLD}Claude Code${NC}                                               │"
     echo "  │  Requires: Claude Pro, Max, Teams, or Enterprise account     │"
-    echo -e "  │  Run: ${GREEN}claude${NC}                                                  │"
+    echo -e "  │  Run: ${GREEN}claude auth login${NC}                                      │"
     echo "  │  → Opens browser for Anthropic OAuth login                   │"
-    echo "  │  → Credentials are cached locally after first login          │"
     echo "  │                                                              │"
-    echo -e "  │  ${BOLD}Gemini CLI${NC}                                                  │"
+    echo -e "  │  ${BOLD}Gemini CLI${NC}                                                │"
     echo "  │  Requires: Google account (free tier: 60 req/min)            │"
-    echo -e "  │  Run: ${GREEN}gemini${NC}                                                  │"
+    echo -e "  │  Run: ${GREEN}gemini${NC}                                                │"
     echo "  │  → Opens browser for Google OAuth login                      │"
-    echo "  │  → Credentials are cached locally after first login          │"
     echo "  │                                                              │"
-    echo -e "  │  ${BOLD}Qwen Code${NC}                                                   │"
-    echo "  │  Requires: Qwen account (free — create at qwen.ai)          │"
-    echo -e "  │  Run: ${GREEN}qwen${NC}                                                    │"
-    echo "  │  → Opens browser for Qwen OAuth login                        │"
-    echo "  │  → Credentials are cached locally after first login          │"
+    echo -e "  │  ${BOLD}Qwen Code${NC}                                                 │"
+    echo "  │  Requires: Qwen account (free tier: 2,000 req/day)           │"
+    echo -e "  │  Run: ${GREEN}qwen${NC} (Then type ${GREEN}/auth${NC})                              │"
+    echo "  │  → Select 'Qwen OAuth' to open browser login                 │"
     echo "  │                                                              │"
     echo "  │  All three use OAuth — no API keys or tokens to manage.      │"
     echo "  │  Each login only needs to happen once per machine.           │"
